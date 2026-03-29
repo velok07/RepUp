@@ -7,6 +7,10 @@ process.on("SIGTERM", () => {
   console.log("Received SIGTERM from platform");
 });
 
+process.on("SIGINT", () => {
+  console.log("Received SIGINT");
+});
+
 process.on("unhandledRejection", (reason) => {
   console.error("unhandledRejection:", reason);
 });
