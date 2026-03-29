@@ -4,7 +4,7 @@ const PORT = Number(process.env.PORT) || 4000;
 const HOST = "0.0.0.0";
 
 process.on("SIGTERM", () => {
-  console.log("Received SIGTERM");
+  console.log("Received SIGTERM from platform");
 });
 
 process.on("unhandledRejection", (reason) => {
