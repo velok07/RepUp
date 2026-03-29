@@ -8,3 +8,4 @@ coverage
 .prisma
 .DS_Store
 *.log
+*.zip
