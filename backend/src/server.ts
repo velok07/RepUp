@@ -1,6 +1,6 @@
 import app from "./app";
 
-const PORT = Number(process.env.PORT) || 8080;
+const PORT = Number(process.env.PORT) || 4000;
 const HOST = "0.0.0.0";
 
 process.on("SIGTERM", () => {
