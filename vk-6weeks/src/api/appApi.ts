@@ -5,7 +5,9 @@ import type {
   UserProgramProgress,
   UserStats,
 } from "../types";
+import { parseURLSearchParamsForGetLaunchParams } from "@vkontakte/vk-bridge";
 import { vkSend } from "../lib/vkBridge";
+import { useAppStore } from "../store/appStore";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -56,8 +58,25 @@ function getStoredToken() {
   return localStorage.getItem("repup_token");
 }
 
-function setStoredToken(token: string) {
+function getStoredVkId() {
+  const raw = localStorage.getItem("repup_vk_id");
+  if (!raw) return null;
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function setStoredToken(token: string, vkId?: number | null) {
   localStorage.setItem("repup_token", token);
+
+  if (typeof vkId === "number") {
+    localStorage.setItem("repup_vk_id", String(vkId));
+  }
+}
+
+function clearStoredToken() {
+  localStorage.removeItem("repup_token");
+  localStorage.removeItem("repup_vk_id");
 }
 
 async function fetchWithTimeout(
@@ -96,33 +115,114 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
   });
 }
 
-async function ensureAuth(): Promise<string | null> {
-  const existingToken = getStoredToken();
-  if (existingToken) {
-    console.log("[RepUp] using stored token");
-    return existingToken;
-  }
+function isLocalDevelopmentHost() {
+  const { hostname } = window.location;
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
 
-  let vkId = 999001;
-  let firstName = "Dev";
-  let lastName = "User";
+function getLaunchParamsVkId() {
+  try {
+    const params = parseURLSearchParamsForGetLaunchParams(window.location.search);
+    const rawVkId =
+      "vk_user_id" in params && typeof params.vk_user_id === "string"
+        ? params.vk_user_id
+        : null;
+
+    if (!rawVkId) return null;
+
+    const vkId = Number(rawVkId);
+    return Number.isFinite(vkId) ? vkId : null;
+  } catch (error) {
+    console.warn("[RepUp] failed to parse launch params", error);
+    return null;
+  }
+}
+
+async function resolveVkIdentity() {
+  const stateUser = useAppStore.getState().user;
+  if (stateUser.vkId) {
+    return {
+      vkId: stateUser.vkId,
+      firstName: stateUser.firstName ?? "VK",
+      lastName: stateUser.lastName ?? "User",
+    };
+  }
 
   try {
     console.log("[RepUp] VK user request start");
 
     const vkUser = await withTimeout(
       vkSend<VkUserInfo>("VKWebAppGetUserInfo"),
-      1500,
+      4000,
       "VKWebAppGetUserInfo"
     );
 
-    vkId = vkUser.id;
-    firstName = vkUser.first_name;
-    lastName = vkUser.last_name;
+    console.log("[RepUp] VK user received", {
+      vkId: vkUser.id,
+      firstName: vkUser.first_name,
+      lastName: vkUser.last_name,
+    });
 
-    console.log("[RepUp] VK user received", { vkId, firstName, lastName });
+    return {
+      vkId: vkUser.id,
+      firstName: vkUser.first_name,
+      lastName: vkUser.last_name,
+    };
   } catch (error) {
-    console.warn("[RepUp] VK unavailable, using dev fallback", error);
+    console.warn("[RepUp] VK user request failed", error);
+  }
+
+  const launchVkId = getLaunchParamsVkId();
+  if (launchVkId) {
+    console.log("[RepUp] using launch params vkId", launchVkId);
+    return {
+      vkId: launchVkId,
+      firstName: stateUser.firstName ?? "VK",
+      lastName: stateUser.lastName ?? "User",
+    };
+  }
+
+  if (isLocalDevelopmentHost()) {
+    console.warn("[RepUp] VK unavailable on localhost, using dev fallback");
+    return {
+      vkId: 999001,
+      firstName: "Dev",
+      lastName: "User",
+    };
+  }
+
+  return null;
+}
+
+async function ensureAuth(): Promise<string | null> {
+  const vkIdentity = await resolveVkIdentity();
+  const existingToken = getStoredToken();
+  const storedVkId = getStoredVkId();
+  const isProdFallbackToken =
+    !isLocalDevelopmentHost() && storedVkId === 999001;
+
+  if (isProdFallbackToken) {
+    console.warn("[RepUp] clearing legacy fallback token in production");
+    clearStoredToken();
+  }
+
+  if (
+    existingToken &&
+    !isProdFallbackToken &&
+    (!vkIdentity || storedVkId === null || storedVkId === vkIdentity.vkId)
+  ) {
+    console.log("[RepUp] using stored token");
+    return existingToken;
+  }
+
+  if (existingToken && vkIdentity && storedVkId !== vkIdentity.vkId) {
+    console.warn("[RepUp] stored token belongs to another vkId, re-auth");
+    clearStoredToken();
+  }
+
+  if (!vkIdentity) {
+    console.warn("[RepUp] VK identity unavailable, auth skipped");
+    return null;
   }
 
   try {
@@ -136,9 +236,9 @@ async function ensureAuth(): Promise<string | null> {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          vkId,
-          firstName,
-          lastName,
+          vkId: vkIdentity.vkId,
+          firstName: vkIdentity.firstName,
+          lastName: vkIdentity.lastName,
         }),
       },
       5000
@@ -153,7 +253,7 @@ async function ensureAuth(): Promise<string | null> {
     }
 
     const data = (await res.json()) as AuthResponse;
-    setStoredToken(data.token);
+    setStoredToken(data.token, data.user.vkId);
 
     console.log("[RepUp] auth ok", data.user);
 
@@ -164,30 +264,50 @@ async function ensureAuth(): Promise<string | null> {
   }
 }
 
+async function authorizedRequest(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  allowRetry = true
+) {
+  const token = await ensureAuth();
+
+  if (!token) {
+    return null;
+  }
+
+  const res = await fetchWithTimeout(
+    input,
+    {
+      ...init,
+      headers: {
+        ...(init?.headers ?? {}),
+        Authorization: `Bearer ${token}`,
+      },
+    },
+    5000
+  );
+
+  if (res.status === 401 && allowRetry) {
+    console.warn("[RepUp] token rejected, re-auth");
+    clearStoredToken();
+    return authorizedRequest(input, init, false);
+  }
+
+  return res;
+}
+
 export const appApi = {
   async load(): Promise<PersistedAppState | null> {
     console.log("[RepUp] appApi.load start", API_URL);
 
-    const token = await ensureAuth();
+    const res = await authorizedRequest(`${API_URL}/me/state`);
 
-    if (!token) {
+    if (!res) {
       console.warn("[RepUp] no token, using default state");
       return DEFAULT_STATE;
     }
 
     try {
-      console.log("[RepUp] /me/state request start");
-
-      const res = await fetchWithTimeout(
-        `${API_URL}/me/state`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-        5000
-      );
-
       console.log("[RepUp] /me/state response", res.status);
 
       if (res.status === 404) {
@@ -211,27 +331,23 @@ export const appApi = {
   },
 
   async save(state: PersistedAppState): Promise<void> {
-    const token = await ensureAuth();
+    const res = await authorizedRequest(
+      `${API_URL}/me/state`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(state),
+      }
+    );
 
-    if (!token) {
+    if (!res) {
       console.warn("[RepUp] save skipped: no token");
       return;
     }
 
     try {
-      const res = await fetchWithTimeout(
-        `${API_URL}/me/state`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(state),
-        },
-        5000
-      );
-
       console.log("[RepUp] save response", res.status);
 
       if (!res.ok) {
@@ -247,25 +363,19 @@ export const appApi = {
   },
 
   async clear(): Promise<void> {
-    const token = await ensureAuth();
+    const res = await authorizedRequest(
+      `${API_URL}/me/reset`,
+      {
+        method: "POST",
+      }
+    );
 
-    if (!token) {
+    if (!res) {
       console.warn("[RepUp] clear skipped: no token");
       return;
     }
 
     try {
-      const res = await fetchWithTimeout(
-        `${API_URL}/me/reset`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-        5000
-      );
-
       console.log("[RepUp] clear response", res.status);
 
       if (!res.ok) {

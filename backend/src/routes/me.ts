@@ -71,10 +71,25 @@ type DbWorkoutLog = {
 
 const router = Router();
 
+async function userExists(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+
+  return Boolean(user);
+}
+
 router.get("/state", authMiddleware, async (req, res) => {
   try {
     const userId = req.auth!.userId;
     console.log("[backend] GET /me/state", { userId });
+
+    const exists = await userExists(userId);
+    if (!exists) {
+      console.log("[backend] stale session: user not found");
+      return res.status(401).json({ message: "Invalid session" });
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -92,7 +107,7 @@ router.get("/state", authMiddleware, async (req, res) => {
 
     if (!user || !user.settings || !user.stats) {
       console.log("[backend] user state not found");
-      return res.status(404).json({ message: "User state not found" });
+      return res.status(401).json({ message: "Invalid session" });
     }
 
     const progresses = user.progresses as unknown as DbProgressItem[];
@@ -165,6 +180,12 @@ router.put("/state", authMiddleware, async (req, res) => {
   try {
     const userId = req.auth!.userId;
     console.log("[backend] PUT /me/state", { userId });
+
+    const exists = await userExists(userId);
+    if (!exists) {
+      console.log("[backend] stale session on save: user not found");
+      return res.status(401).json({ message: "Invalid session" });
+    }
 
     const { user, activeProgramId, progress, settings, userStats } =
       req.body as SaveStateBody;
@@ -310,6 +331,12 @@ router.post("/reset", authMiddleware, async (req, res) => {
   try {
     const userId = req.auth!.userId;
     console.log("[backend] POST /me/reset", { userId });
+
+    const exists = await userExists(userId);
+    if (!exists) {
+      console.log("[backend] stale session on reset: user not found");
+      return res.status(401).json({ message: "Invalid session" });
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.programProgress.deleteMany({

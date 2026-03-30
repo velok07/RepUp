@@ -188,7 +188,7 @@ export default function HomeScreen() {
         <div
           style={{
             fontSize: 13,
-            fontWeight: 700,
+            fontWeight: 600,
             opacity: 0.82,
             marginBottom: 8,
             textTransform: "uppercase",
@@ -208,12 +208,10 @@ export default function HomeScreen() {
           }}
         >
           <div>
-            <div style={{ fontSize: 15, opacity: 0.9, marginBottom: 4 }}>
+            <div style={{ fontSize: 15, opacity: 0.9, marginBottom: 4, fontWeight: 500 }}>
               Уровень {level}
             </div>
-            <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1 }}>
-              {xp} XP
-            </div>
+            <div style={{ fontSize: 34, fontWeight: 700, lineHeight: 1 }}>{xp} XP</div>
           </div>
 
           <div
@@ -223,7 +221,7 @@ export default function HomeScreen() {
               background: "rgba(255,255,255,0.12)",
               border: "1px solid rgba(255,255,255,0.16)",
               fontSize: 13,
-              fontWeight: 800,
+              fontWeight: 600,
               whiteSpace: "nowrap",
             }}
           >
@@ -266,23 +264,15 @@ export default function HomeScreen() {
           }}
         >
           <div>
-            <h3 style={{ margin: 0, fontSize: 20 }}>Активные тренировки</h3>
+            <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Активная программа</h3>
           </div>
 
           {effectivePrograms.length > 1 && (
             <div style={{ display: "flex", gap: 8 }}>
-              <IconButton
-                ariaLabel="Предыдущая программа"
-                onClick={goPrev}
-                disabled={!canSlidePrev}
-              >
+              <IconButton ariaLabel="Предыдущая программа" onClick={goPrev} disabled={!canSlidePrev}>
                 ←
               </IconButton>
-              <IconButton
-                ariaLabel="Следующая программа"
-                onClick={goNext}
-                disabled={!canSlideNext}
-              >
+              <IconButton ariaLabel="Следующая программа" onClick={goNext} disabled={!canSlideNext}>
                 →
               </IconButton>
             </div>
@@ -290,24 +280,55 @@ export default function HomeScreen() {
         </div>
 
         {currentProgram && currentProgress ? (
-          <div
-            style={{
-              display: "grid",
-              gap: 14,
-            }}
-          >
+          <div style={{ display: "grid", gap: 14 }}>
             <div
               style={{
-                padding: 16,
-                borderRadius: 18,
-                background: "var(--soft-bg)",
-                border: "1px solid var(--border-color)",
+                padding: 18,
+                borderRadius: 22,
+                background:
+                  "linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 96%, #ffffff 4%) 0%, var(--soft-bg) 100%)",
+                border: "1px solid color-mix(in srgb, var(--border-color) 88%, transparent)",
+                boxShadow: "0 18px 40px color-mix(in srgb, var(--text-color) 10%, transparent)",
               }}
             >
               <div
                 style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  marginBottom: 10,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 500,
+                    color: "var(--muted-text-color)",
+                  }}
+                >
+                  Активная программа
+                </div>
+
+                <div
+                  style={{
+                    padding: "7px 10px",
+                    borderRadius: 999,
+                    background: "color-mix(in srgb, var(--primary-color) 14%, transparent)",
+                    color: "var(--primary-strong)",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Уровень {currentProgress.level}
+                </div>
+              </div>
+
+              <div
+                style={{
                   fontSize: 22,
-                  fontWeight: 900,
+                  fontWeight: 700,
                   color: "var(--text-color)",
                   lineHeight: 1.15,
                   marginBottom: 8,
@@ -318,15 +339,26 @@ export default function HomeScreen() {
 
               <div style={{ ...mutedTextStyle, fontSize: 14, marginBottom: 12 }}>
                 {currentProgress.finished
-                  ? "Программа завершена"
-                  : `Неделя ${currentProgress.currentWeek} · День ${currentProgress.currentDay}`}
+                  ? "Программа завершена."
+                  : `Сейчас: открыта неделя ${currentProgress.currentWeek}, день ${currentProgress.currentDay}.`}
               </div>
 
               <div
                 style={{
-                  height: 10,
+                  fontSize: 15,
+                  fontWeight: 500,
+                  color: "var(--text-color)",
+                  marginBottom: 10,
+                }}
+              >
+                Выполнено {currentProgress.completedWorkouts.length} из {getProgramTotalWorkouts(currentProgram)} тренировок
+              </div>
+
+              <div
+                style={{
+                  height: 8,
                   borderRadius: 999,
-                  background: "var(--card-bg)",
+                  background: "rgba(148, 163, 184, 0.14)",
                   overflow: "hidden",
                   marginBottom: 10,
                 }}
@@ -344,27 +376,43 @@ export default function HomeScreen() {
 
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
                   fontSize: 14,
                   color: "var(--muted-text-color)",
                   marginBottom: 16,
                 }}
               >
-                <span>{currentProgramPercent}% выполнено</span>
-                <span>
-                  {currentProgress.completedWorkouts.length}/
-                  {getProgramTotalWorkouts(currentProgram)} тренировок
-                </span>
+                {currentProgramPercent}% прогресса по программе
               </div>
 
-              <button
-                style={{ ...buttonStyle, width: "100%" }}
-                onClick={openCurrentProgram}
-              >
-                {currentProgress.finished ? "Открыть план" : "Продолжить тренировку"}
-              </button>
+              <div style={{ display: "grid", gap: 10, maxWidth: 240 }}>
+                <button
+                  style={{
+                    ...buttonStyle,
+                    width: "100%",
+                    fontWeight: 700,
+                    borderRadius: 16,
+                  }}
+                  onClick={openCurrentProgram}
+                >
+                  {currentProgress.finished ? "Открыть план" : "Продолжить тренировку"}
+                </button>
+
+                {!currentProgress.finished && (
+                  <button
+                    style={{
+                      ...secondaryButtonStyle,
+                      width: "fit-content",
+                      minWidth: 132,
+                      borderRadius: 16,
+                      background: "var(--card-bg)",
+                      boxShadow: "0 12px 24px color-mix(in srgb, var(--text-color) 10%, transparent)",
+                    }}
+                    onClick={() => navigate(`/plan/${currentProgram.id}`)}
+                  >
+                    Смотреть план
+                  </button>
+                )}
+              </div>
             </div>
 
             {effectivePrograms.length > 1 && (
@@ -387,9 +435,7 @@ export default function HomeScreen() {
                       border: "none",
                       padding: 0,
                       background:
-                        index === currentIndex
-                          ? "var(--primary-color)"
-                          : "var(--border-color)",
+                        index === currentIndex ? "var(--primary-color)" : "var(--border-color)",
                       cursor: "pointer",
                     }}
                   />
@@ -406,17 +452,44 @@ export default function HomeScreen() {
         <div
           style={{
             marginBottom: 14,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
           }}
         >
-          <div
+          <div>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: "var(--text-color)",
+              }}
+            >
+              Достижения
+            </div>
+            <div style={{ ...mutedTextStyle, fontSize: 14, marginTop: 2 }}>
+              Открыто {achievementProgress.unlockedIds.length} из {achievements.length}
+            </div>
+          </div>
+
+          <button
+            onClick={() => navigate("/achievements")}
             style={{
-              fontSize: 20,
-              fontWeight: 900,
+              minHeight: 44,
+              padding: "10px 14px",
+              borderRadius: 16,
+              border: "1px solid var(--border-color)",
+              background: "var(--soft-bg)",
               color: "var(--text-color)",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
             }}
           >
-            Достижения
-          </div>
+            Все достижения
+          </button>
         </div>
 
         <div
@@ -439,18 +512,21 @@ export default function HomeScreen() {
                   background: unlocked
                     ? "linear-gradient(180deg, var(--success-bg-soft) 0%, var(--card-bg) 100%)"
                     : "var(--card-bg)",
-                  display: "grid",
-                  gap: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  minHeight: 92,
                 }}
               >
                 <div
                   style={{
-                    width: 60,
-                    height: 60,
-                    borderRadius: 18,
+                    width: 54,
+                    height: 54,
+                    borderRadius: 16,
                     display: "grid",
                     placeItems: "center",
-                    fontSize: 30,
+                    flexShrink: 0,
+                    fontSize: 26,
                     background: unlocked ? achievement.color : "var(--soft-bg)",
                     color: unlocked ? "#fff" : "var(--muted-text-color)",
                     boxShadow: unlocked ? "0 10px 24px rgba(0,0,0,0.12)" : "none",
@@ -459,53 +535,20 @@ export default function HomeScreen() {
                   {achievement.icon}
                 </div>
 
-                <div>
-                  <div
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 800,
-                      color: "var(--text-color)",
-                      lineHeight: 1.25,
-                      marginBottom: 4,
-                    }}
-                  >
-                    {achievement.title}
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "var(--muted-text-color)",
-                      lineHeight: 1.35,
-                    }}
-                  >
-                    {achievement.description}
-                  </div>
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: "var(--text-color)",
+                    lineHeight: 1.25,
+                  }}
+                >
+                  {achievement.title}
                 </div>
               </div>
             );
           })}
         </div>
-
-        {achievements.length > 4 && (
-          <button
-            onClick={() => navigate("/achievements")}
-            style={{
-              marginTop: 14,
-              width: "100%",
-              minHeight: 48,
-              borderRadius: 16,
-              border: "1px solid var(--border-color)",
-              background: "var(--soft-bg)",
-              color: "var(--text-color)",
-              fontSize: 14,
-              fontWeight: 800,
-              cursor: "pointer",
-            }}
-          >
-            Открыть все достижения
-          </button>
-        )}
       </section>
     </div>
   );
@@ -535,7 +578,7 @@ function IconButton({
         background: "var(--card-bg)",
         color: "var(--text-color)",
         fontSize: 18,
-        fontWeight: 900,
+        fontWeight: 700,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.45 : 1,
       }}

@@ -1,5 +1,11 @@
 import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+  Icon28GraphOutline,
+  Icon28HomeOutline,
+  Icon28ServicesOutline,
+  Icon28UserCircleOutline,
+} from "@vkontakte/icons";
 import { useAppStore } from "../store/appStore";
 import { initVkUser } from "./initVk";
 
@@ -9,6 +15,11 @@ export default function App() {
   const theme = useAppStore((s) => s.settings.theme);
   const hydrated = useAppStore((s) => s.hydrated);
   const hydrate = useAppStore((s) => s.hydrate);
+  const activeWorkoutSession = useAppStore((s) => s.activeWorkoutSession);
+  const workoutReturnTarget = activeWorkoutSession
+    ? `/workout/${activeWorkoutSession.programId}`
+    : null;
+  const hasWorkoutToReturn = workoutReturnTarget !== null && location.pathname !== workoutReturnTarget;
 
   useEffect(() => {
     void hydrate();
@@ -136,6 +147,60 @@ export default function App() {
             padding: "4px 16px calc(92px + env(safe-area-inset-bottom, 0px))",
           }}
         >
+          {hasWorkoutToReturn && (
+            <button
+              onClick={() => {
+                if (workoutReturnTarget) {
+                  navigate(workoutReturnTarget);
+                }
+              }}
+              style={{
+                width: "100%",
+                border: "none",
+                borderRadius: 22,
+                padding: "14px 18px",
+                marginBottom: 14,
+                background:
+                  "linear-gradient(135deg, var(--primary-color) 0%, var(--primary-strong) 100%)",
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 14,
+                boxShadow: "0 18px 30px rgba(99, 102, 241, 0.24)",
+                cursor: "pointer",
+              }}
+            >
+              <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span
+                  style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: 16,
+                    display: "grid",
+                    placeItems: "center",
+                    background: "rgba(255,255,255,0.18)",
+                    fontSize: 20,
+                    flexShrink: 0,
+                  }}
+                >
+                  ⏱
+                </span>
+
+                <span style={{ textAlign: "left" }}>
+                  <span style={{ display: "block", fontSize: 12, opacity: 0.84, marginBottom: 2 }}>
+                    Тренировка продолжается
+                  </span>
+                  <span style={{ display: "block", fontSize: 16, fontWeight: 800 }}>
+                    Вернуться к подходам
+                  </span>
+                </span>
+              </span>
+
+              <span style={{ fontSize: 20, fontWeight: 800, lineHeight: 1 }}>→</span>
+            </button>
+          )}
+
           <Outlet />
         </main>
 
@@ -145,10 +210,7 @@ export default function App() {
             position: "sticky",
             bottom: 0,
             padding: "8px 12px calc(10px + env(safe-area-inset-bottom, 0px))",
-            background:
-              theme === "dark"
-                ? "linear-gradient(180deg, rgba(2,6,23,0) 0%, rgba(2,6,23,0.94) 24%, rgba(2,6,23,1) 100%)"
-                : "linear-gradient(180deg, rgba(248,250,252,0) 0%, rgba(248,250,252,0.94) 24%, rgba(248,250,252,1) 100%)",
+            background: "transparent",
           }}
         >
           <div
@@ -170,7 +232,7 @@ export default function App() {
               active={location.pathname === "/"}
               onClick={() => navigate("/")}
             >
-              <HomeIcon />
+              <Icon28HomeOutline />
             </NavItem>
             <NavItem
               label="Программы"
@@ -180,21 +242,21 @@ export default function App() {
               }
               onClick={() => navigate("/programs")}
             >
-              <DumbbellIcon />
+              <Icon28ServicesOutline />
             </NavItem>
             <NavItem
               label="Прогресс"
               active={location.pathname.startsWith("/progress")}
               onClick={() => navigate("/progress")}
             >
-              <ChartIcon />
+              <Icon28GraphOutline />
             </NavItem>
             <NavItem
               label="Профиль"
               active={location.pathname.startsWith("/profile")}
               onClick={() => navigate("/profile")}
             >
-              <ProfileIcon />
+              <Icon28UserCircleOutline />
             </NavItem>
           </div>
         </nav>
@@ -223,91 +285,28 @@ function NavItem({
         border: "none",
         borderRadius: 18,
         minHeight: 60,
-        padding: "10px 4px",
+        padding: "8px 4px",
         background: active ? "var(--primary-color)" : "transparent",
-        color: active ? "#ffffff" : "var(--muted-text-color)",
+        color: active ? "#ffffff" : "color-mix(in srgb, var(--text-color) 74%, #64748b)",
         cursor: "pointer",
         transition: "all 0.2s ease",
         display: "grid",
         placeItems: "center",
+        boxShadow: active ? "0 12px 22px rgba(99, 102, 241, 0.28)" : "none",
       }}
     >
       <span
         style={{
           display: "grid",
           placeItems: "center",
-          width: 30,
-          height: 30,
+          width: 34,
+          height: 34,
           lineHeight: 0,
         }}
       >
         {children}
       </span>
     </button>
-  );
-}
-
-function NavIcon({ children }: { children: React.ReactNode }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="26"
-      height="26"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.95"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      {children}
-    </svg>
-  );
-}
-
-function HomeIcon() {
-  return (
-    <NavIcon>
-      <path d="M3.5 10.5L12 4l8.5 6.5" />
-      <path d="M6.5 9.5V20h11V9.5" />
-      <path d="M10 20v-5h4v5" />
-    </NavIcon>
-  );
-}
-
-function DumbbellIcon() {
-  return (
-    <NavIcon>
-      <path d="M3 9v6" />
-      <path d="M6 7v10" />
-      <path d="M9 9v6" />
-      <path d="M15 9v6" />
-      <path d="M18 7v10" />
-      <path d="M21 9v6" />
-      <path d="M9 12h6" />
-      <path d="M6 12H3" />
-      <path d="M21 12h-3" />
-    </NavIcon>
-  );
-}
-
-function ChartIcon() {
-  return (
-    <NavIcon>
-      <path d="M5 19.5h14" />
-      <path d="M7.5 16v-4" />
-      <path d="M12 16v-8" />
-      <path d="M16.5 16v-6" />
-    </NavIcon>
-  );
-}
-
-function ProfileIcon() {
-  return (
-    <NavIcon>
-      <circle cx="12" cy="8" r="3.2" />
-      <path d="M5.5 19c1.8-3 4.1-4.5 6.5-4.5s4.7 1.5 6.5 4.5" />
-    </NavIcon>
   );
 }
 
