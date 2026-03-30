@@ -2,6 +2,8 @@
   "name": "repup-root",
   "private": true,
   "scripts": {
+    "build": "npm run build:backend",
+    "start": "npm run serve:backend",
     "build:backend": "npm --prefix backend ci && npm --prefix backend run prisma:generate && npm --prefix backend run build",
     "serve:backend": "node backend/dist/server.js"
   }
