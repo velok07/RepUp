@@ -16,21 +16,21 @@ export default function ProgressScreen() {
     [progressMap]
   );
 
-  const [activeIndex, setActiveIndex] = useState(() => {
-    const foundIndex = startedPrograms.findIndex((item) => item.id === activeProgramId);
-    return foundIndex >= 0 ? foundIndex : 0;
-  });
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(activeProgramId);
 
-  useEffect(() => {
-    if (startedPrograms.length === 0) {
-      setActiveIndex(0);
-      return;
+  const activeIndex = useMemo(() => {
+    if (startedPrograms.length === 0) return 0;
+
+    const preferredIds = [selectedProgramId, activeProgramId];
+
+    for (const programId of preferredIds) {
+      if (!programId) continue;
+      const index = startedPrograms.findIndex((item) => item.id === programId);
+      if (index >= 0) return index;
     }
 
-    if (!startedPrograms[activeIndex]) {
-      setActiveIndex(0);
-    }
-  }, [activeIndex, startedPrograms]);
+    return 0;
+  }, [activeProgramId, selectedProgramId, startedPrograms]);
 
   const activeProgram = startedPrograms[activeIndex] ?? null;
   const activeProgress = activeProgram ? progressMap[activeProgram.id] ?? null : null;
@@ -87,7 +87,9 @@ export default function ProgressScreen() {
           }}
         >
           <ArrowButton
-            onClick={() => setActiveIndex((value) => Math.max(value - 1, 0))}
+            onClick={() =>
+              setSelectedProgramId(startedPrograms[Math.max(activeIndex - 1, 0)]?.id ?? null)
+            }
             disabled={activeIndex === 0}
           >
             ←
@@ -103,7 +105,11 @@ export default function ProgressScreen() {
           </div>
 
           <ArrowButton
-            onClick={() => setActiveIndex((value) => Math.min(value + 1, startedPrograms.length - 1))}
+            onClick={() =>
+              setSelectedProgramId(
+                startedPrograms[Math.min(activeIndex + 1, startedPrograms.length - 1)]?.id ?? null
+              )
+            }
             disabled={activeIndex === startedPrograms.length - 1}
           >
             →

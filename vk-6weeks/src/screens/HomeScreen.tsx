@@ -58,23 +58,23 @@ export default function HomeScreen() {
 
   const effectivePrograms = sliderPrograms.length > 0 ? sliderPrograms : startedPrograms;
 
-  const initialIndex = Math.max(
-    effectivePrograms.findIndex((program) => program.id === resolvedActiveProgramId),
-    0
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(
+    resolvedActiveProgramId
   );
 
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const currentIndex = useMemo(() => {
+    if (effectivePrograms.length === 0) return 0;
 
-  useEffect(() => {
-    setCurrentIndex((prev) => {
-      if (effectivePrograms.length === 0) return 0;
-      const nextIndex = effectivePrograms.findIndex(
-        (program) => program.id === resolvedActiveProgramId
-      );
-      if (nextIndex >= 0) return nextIndex;
-      return Math.min(prev, effectivePrograms.length - 1);
-    });
-  }, [effectivePrograms, resolvedActiveProgramId]);
+    const preferredIds = [selectedProgramId, resolvedActiveProgramId];
+
+    for (const programId of preferredIds) {
+      if (!programId) continue;
+      const index = effectivePrograms.findIndex((program) => program.id === programId);
+      if (index >= 0) return index;
+    }
+
+    return 0;
+  }, [effectivePrograms, resolvedActiveProgramId, selectedProgramId]);
 
   const currentProgram = effectivePrograms[currentIndex] ?? null;
   const currentProgress = currentProgram ? progressMap[currentProgram.id] ?? null : null;
@@ -104,13 +104,14 @@ export default function HomeScreen() {
   const canSlideNext = currentIndex < effectivePrograms.length - 1;
 
   const goPrev = () => {
-    setCurrentIndex((value) => Math.max(0, value - 1));
+    const nextProgram = effectivePrograms[Math.max(0, currentIndex - 1)] ?? null;
+    setSelectedProgramId(nextProgram?.id ?? null);
   };
 
   const goNext = () => {
-    setCurrentIndex((value) =>
-      Math.min(effectivePrograms.length - 1, value + 1)
-    );
+    const nextProgram =
+      effectivePrograms[Math.min(effectivePrograms.length - 1, currentIndex + 1)] ?? null;
+    setSelectedProgramId(nextProgram?.id ?? null);
   };
 
   const openCurrentProgram = () => {
@@ -377,7 +378,7 @@ export default function HomeScreen() {
                 {effectivePrograms.map((program, index) => (
                   <button
                     key={program.id}
-                    onClick={() => setCurrentIndex(index)}
+                    onClick={() => setSelectedProgramId(program.id)}
                     aria-label={`Перейти к программе ${program.title}`}
                     style={{
                       width: 8,

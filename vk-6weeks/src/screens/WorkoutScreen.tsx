@@ -89,32 +89,31 @@ export default function WorkoutScreen() {
     if (!resting || restLeft <= 0) return;
 
     const timer = window.setTimeout(() => {
-      setRestLeft((prev) => prev - 1);
+      setRestLeft((prev) => {
+        if (prev <= 1) {
+          setResting(false);
+          setCurrentStep((current) => current + 1);
+          setActualValue("");
+          setEditActual(false);
+          return 0;
+        }
+
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearTimeout(timer);
   }, [resting, restLeft]);
 
   useEffect(() => {
-    if (resting && restLeft === 0) {
-      setResting(false);
-      setCurrentStep((prev) => prev + 1);
-      setActualValue("");
-      setEditActual(false);
-    }
-  }, [resting, restLeft]);
-
-  useEffect(() => {
-    if (!finished || unlockedAchievementItems.length === 0) return;
-
-    setShowAchievementToast(true);
+    if (!showAchievementToast) return;
 
     const timer = window.setTimeout(() => {
       setShowAchievementToast(false);
     }, 3500);
 
     return () => clearTimeout(timer);
-  }, [finished, unlockedAchievementItems.length]);
+  }, [showAchievementToast]);
 
   useEffect(() => {
     if (!(started && !finished)) return;
@@ -195,6 +194,7 @@ export default function WorkoutScreen() {
       const newUnlockedIds = unlockedIds.filter((achievementId) => !rewardedBefore.has(achievementId));
 
       syncAchievementRewards(unlockedIds);
+      setShowAchievementToast(newUnlockedIds.length > 0);
 
       setCompletedWorkoutInfo({
         week: workout.week,

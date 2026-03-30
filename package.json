@@ -2,7 +2,7 @@
   "name": "repup-root",
   "private": true,
   "scripts": {
-    "build": "cd backend && npm install && npx prisma generate && npm run build",
-    "start": "cd backend && npm run start"
+    "build:backend": "npm --prefix backend ci && npm --prefix backend run prisma:generate && npm --prefix backend run build",
+    "serve:backend": "node backend/dist/server.js"
   }
 }

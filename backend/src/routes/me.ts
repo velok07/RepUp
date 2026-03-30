@@ -1,5 +1,4 @@
 import { Router } from "express";
-import type { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma";
 import { authMiddleware } from "../middleware/auth";
 
@@ -175,7 +174,7 @@ router.put("/state", authMiddleware, async (req, res) => {
       (item: IncomingProgressItem) => item.programId
     );
 
-    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: userId },
         data: {
@@ -312,7 +311,7 @@ router.post("/reset", authMiddleware, async (req, res) => {
     const userId = req.auth!.userId;
     console.log("[backend] POST /me/reset", { userId });
 
-    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await prisma.$transaction(async (tx) => {
       await tx.programProgress.deleteMany({
         where: { userId },
       });
