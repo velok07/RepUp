@@ -14,15 +14,18 @@ if (!connectionString) {
 }
 
 const certificatePath = path.resolve(backendRoot, "certs", "timeweb-ca.crt");
-const ssl =
-  fs.existsSync(certificatePath)
-    ? {
-        ca: fs.readFileSync(certificatePath, "utf8"),
-        rejectUnauthorized: true,
-      }
-    : undefined;
-
 const databaseUrl = new URL(connectionString);
+const sslMode = databaseUrl.searchParams.get("sslmode")?.toLowerCase();
+const hasCertificate = fs.existsSync(certificatePath);
+const ssl =
+  sslMode === "require"
+    ? { rejectUnauthorized: false }
+    : hasCertificate
+      ? {
+          ca: fs.readFileSync(certificatePath, "utf8"),
+          rejectUnauthorized: true,
+        }
+      : undefined;
 
 const pool = new Pool({
   host: databaseUrl.hostname,
