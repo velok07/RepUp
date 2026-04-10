@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { programs } from "../data/programs";
 import { useAppStore } from "../store/appStore";
 import type { ProgramType } from "../types";
+import { parsePositiveInt, sanitizeDigitsInput } from "../utils/numeric";
 import { getLevelByResult } from "../utils/plan";
 import {
   buttonStyle,
@@ -19,16 +20,17 @@ export default function LevelTestScreen() {
   const [result, setResult] = useState("");
 
   const program = programs.find((item) => item.id === id);
+  const parsedResult = parsePositiveInt(result);
+  const hasValidResult = parsedResult !== null && parsedResult > 0;
 
   if (!program || !id) {
     return <div style={cardStyle}>Программа не найдена</div>;
   }
 
   const onSubmit = () => {
-    const value = Number(result);
-    if (Number.isNaN(value) || value < 0) return;
+    if (!hasValidResult) return;
 
-    const level = getLevelByResult(id as ProgramType, value);
+    const level = getLevelByResult(id as ProgramType, parsedResult);
     startProgram(id as ProgramType, level);
     navigate(`/workout/${id}`);
   };
@@ -62,15 +64,41 @@ export default function LevelTestScreen() {
         </p>
 
         <input
-          type="number"
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
           value={result}
-          onChange={(e) => setResult(e.target.value)}
+          onChange={(e) => setResult(sanitizeDigitsInput(e.target.value, 4))}
           placeholder={program.unit === "seconds" ? "Например, 45" : "Например, 12"}
-          style={{ ...inputStyle, maxWidth: 260, marginBottom: 12, fontSize: 16 }}
+          aria-invalid={result.length > 0 && !hasValidResult}
+          style={{
+            ...inputStyle,
+            maxWidth: 260,
+            marginBottom: 12,
+            fontSize: 16,
+            border:
+              result.length > 0 && !hasValidResult
+                ? "1px solid var(--danger-color)"
+                : inputStyle.border,
+          }}
         />
 
+        {result.length > 0 && !hasValidResult ? (
+          <p style={{ ...mutedTextStyle, color: "var(--danger-color)", marginTop: 0 }}>
+            Введи целое число больше 0.
+          </p>
+        ) : null}
+
         <div>
-          <button style={buttonStyle} onClick={onSubmit}>
+          <button
+            style={{
+              ...buttonStyle,
+              opacity: hasValidResult ? 1 : 0.5,
+              cursor: hasValidResult ? "pointer" : "not-allowed",
+            }}
+            onClick={onSubmit}
+            disabled={!hasValidResult}
+          >
             Построить план
           </button>
         </div>

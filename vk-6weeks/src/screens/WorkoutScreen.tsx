@@ -9,6 +9,7 @@ import {
 import { achievements } from "../data/achievements";
 import { programs } from "../data/programs";
 import type { ProgramType } from "../types";
+import { parsePositiveInt, sanitizeDigitsInput } from "../utils/numeric";
 import {
   buttonStyle,
   cardStyle,
@@ -94,6 +95,9 @@ export default function WorkoutScreen() {
     previewActualValue !== null && !Number.isNaN(previewActualValue) && previewActualValue >= 0
       ? previewActualValue
       : currentTargetValue(workout, currentStep);
+  const parsedActualValue = parsePositiveInt(actualValue);
+  const hasValidActualValue =
+    actualValue.length > 0 && parsedActualValue !== null && parsedActualValue >= 0;
 
   const completeRest = () => {
     setRestLeft(0);
@@ -305,10 +309,9 @@ export default function WorkoutScreen() {
   };
 
   const onDoneCustom = () => {
-    const actual = Number(actualValue);
-    if (Number.isNaN(actual) || actual < 0) return;
+    if (!hasValidActualValue) return;
 
-    const nextActuals = [...actuals, actual];
+    const nextActuals = [...actuals, parsedActualValue];
     setActuals(nextActuals);
     finishOrContinue(nextActuals);
   };
@@ -886,12 +889,29 @@ export default function WorkoutScreen() {
               </label>
 
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={actualValue}
-                onChange={(e) => setActualValue(e.target.value)}
+                onChange={(e) => setActualValue(sanitizeDigitsInput(e.target.value, 4))}
                 placeholder={`Введи число (${shortUnitLabel})`}
-                style={{ ...inputStyle, width: "100%", fontSize: 16 }}
+                aria-invalid={actualValue.length > 0 && !hasValidActualValue}
+                style={{
+                  ...inputStyle,
+                  width: "100%",
+                  fontSize: 16,
+                  border:
+                    actualValue.length > 0 && !hasValidActualValue
+                      ? "1px solid var(--danger-color)"
+                      : inputStyle.border,
+                }}
               />
+
+              {actualValue.length > 0 && !hasValidActualValue ? (
+                <div style={{ ...mutedTextStyle, color: "var(--danger-color)" }}>
+                  Введи целое число от 0 и выше.
+                </div>
+              ) : null}
 
               <div
                 style={{
@@ -900,7 +920,16 @@ export default function WorkoutScreen() {
                   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                 }}
               >
-                <button style={{ ...buttonStyle, width: "100%" }} onClick={onDoneCustom}>
+                <button
+                  style={{
+                    ...buttonStyle,
+                    width: "100%",
+                    opacity: hasValidActualValue ? 1 : 0.5,
+                    cursor: hasValidActualValue ? "pointer" : "not-allowed",
+                  }}
+                  onClick={onDoneCustom}
+                  disabled={!hasValidActualValue}
+                >
                   Подтвердить
                 </button>
 

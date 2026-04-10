@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppStore } from "../store/appStore";
+import { clampNumber, parsePositiveInt, sanitizeDigitsInput } from "../utils/numeric";
 import {
   buttonStyle,
   cardStyle,
@@ -17,10 +18,33 @@ export default function ProfileScreen() {
   const user = useAppStore((s) => s.user);
 
   const [confirmReset, setConfirmReset] = useState(false);
+  const [restInput, setRestInput] = useState(String(settings.restSeconds));
+  const [saveMessage, setSaveMessage] = useState("");
 
   const hasAnyProgress = useMemo(() => {
     return Object.values(progress).some(Boolean);
   }, [progress]);
+
+  useEffect(() => {
+    setRestInput(String(settings.restSeconds));
+  }, [settings.restSeconds]);
+
+  const parsedRestInput = parsePositiveInt(restInput);
+  const hasValidRestInput =
+    restInput.length > 0 && parsedRestInput !== null && parsedRestInput >= 0;
+
+  const persistRestSeconds = (nextValue: string) => {
+    const parsed = parsePositiveInt(nextValue);
+    const normalized = clampNumber(parsed ?? 0, 0, 600);
+
+    updateSettings({ restSeconds: normalized });
+    setRestInput(String(normalized));
+    setSaveMessage("Сохранено");
+
+    window.setTimeout(() => {
+      setSaveMessage((current) => (current === "Сохранено" ? "" : current));
+    }, 1500);
+  };
 
   const displayName =
     [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || "Пользователь VK";
@@ -173,18 +197,55 @@ export default function ProfileScreen() {
         <h3 style={{ marginTop: 0 }}>Отдых между подходами</h3>
         <p style={mutedTextStyle}>Сейчас: {settings.restSeconds} сек</p>
 
-        <input
-          type="number"
-          min={0}
-          step={5}
-          value={settings.restSeconds}
-          onChange={(e) =>
-            updateSettings({
-              restSeconds: Math.max(0, Number(e.target.value) || 0),
-            })
-          }
-          style={{ ...inputStyle, maxWidth: 220 }}
-        />
+        <div style={{ display: "grid", gap: 12, maxWidth: 260 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "56px minmax(0, 1fr) 56px", gap: 10 }}>
+            <button
+              type="button"
+              style={{ ...secondaryButtonStyle, paddingInline: 0, minHeight: 48 }}
+              onClick={() => persistRestSeconds(String(clampNumber(settings.restSeconds - 5, 0, 600)))}
+            >
+              -5
+            </button>
+
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={restInput}
+              onChange={(e) => {
+                setRestInput(sanitizeDigitsInput(e.target.value, 3));
+                setSaveMessage("");
+              }}
+              onBlur={() => persistRestSeconds(restInput)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
+              aria-invalid={restInput.length > 0 && !hasValidRestInput}
+              style={{
+                ...inputStyle,
+                textAlign: "center",
+                border:
+                  restInput.length > 0 && !hasValidRestInput
+                    ? "1px solid var(--danger-color)"
+                    : inputStyle.border,
+              }}
+            />
+
+            <button
+              type="button"
+              style={{ ...secondaryButtonStyle, paddingInline: 0, minHeight: 48 }}
+              onClick={() => persistRestSeconds(String(clampNumber(settings.restSeconds + 5, 0, 600)))}
+            >
+              +5
+            </button>
+          </div>
+
+          <div style={{ ...mutedTextStyle, minHeight: 20 }}>
+            {saveMessage || "Можно ввести от 0 до 600 секунд"}
+          </div>
+        </div>
       </div>
 
       <div style={cardStyle}>
