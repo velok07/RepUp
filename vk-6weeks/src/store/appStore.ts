@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { appApi } from "../api/appApi";
 import { programs } from "../data/programs";
 import type {
+  ActiveWorkoutSession,
   AppSettings,
   AppState,
   AppUser,
@@ -33,6 +34,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   hydrated: false,
   user: defaultUser,
   activeProgramId: null,
+  activeWorkoutSessions: {},
   progress: {},
   settings: defaultSettings,
   userStats: defaultUserStats,
@@ -50,7 +52,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...(persisted?.user ?? {}),
         },
         activeProgramId: persisted?.activeProgramId ?? null,
-        progress: persisted?.progress ?? {},
+        progress: normalizeProgressMap(persisted?.progress ?? {}),
         settings: {
           ...defaultSettings,
           ...(persisted?.settings ?? {}),
@@ -95,6 +97,35 @@ export const useAppStore = create<AppState>((set, get) => ({
     void saveStateSafely(get());
   },
 
+  setActiveWorkoutSession: (session: ActiveWorkoutSession | null) => {
+    if (!session) {
+      return;
+    }
+
+    set((state) => ({
+      activeWorkoutSessions: {
+        ...state.activeWorkoutSessions,
+        [session.programId]: session,
+      },
+    }));
+  },
+
+  clearActiveWorkoutSession: (programId) => {
+    if (!programId) {
+      set({ activeWorkoutSessions: {} });
+      return;
+    }
+
+    set((state) => {
+      const nextSessions = { ...state.activeWorkoutSessions };
+      delete nextSessions[programId];
+
+      return {
+        activeWorkoutSessions: nextSessions,
+      };
+    });
+  },
+
   updateSettings: (patch) => {
     set((state) => ({
       settings: {
@@ -111,6 +142,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       progress: {
         ...state.progress,
         [programId]: createInitialProgress(programId, level),
+      },
+    }));
+    void saveStateSafely(get());
+  },
+
+  setProgramLoadAdjustment: (programId, loadAdjustment) => {
+    const current = get().progress[programId];
+    if (!current) return;
+
+    set((state) => ({
+      progress: {
+        ...state.progress,
+        [programId]: {
+          ...current,
+          loadAdjustment,
+        },
       },
     }));
     void saveStateSafely(get());
@@ -255,6 +302,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       hydrated: true,
       user: currentUser,
       activeProgramId: null,
+      activeWorkoutSessions: {},
       progress: {},
       settings: currentSettings,
       userStats: {
@@ -275,6 +323,7 @@ function createInitialProgress(
   return {
     programId,
     level,
+    loadAdjustment: 1,
     startedAt: new Date().toISOString(),
     currentWeek: 1,
     currentDay: 1,
@@ -283,6 +332,20 @@ function createInitialProgress(
     workoutLogs: [],
     finished: false,
   };
+}
+
+function normalizeProgressMap(progressMap: Partial<AppState["progress"]>) {
+  return Object.fromEntries(
+    Object.entries(progressMap).map(([programId, progress]) => [
+      programId,
+      progress
+        ? {
+            ...progress,
+            loadAdjustment: progress.loadAdjustment ?? 1,
+          }
+        : progress,
+    ])
+  ) as AppState["progress"];
 }
 
 async function saveStateSafely(state: AppState) {

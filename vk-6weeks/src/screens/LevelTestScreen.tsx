@@ -66,7 +66,7 @@ export default function LevelTestScreen() {
           value={result}
           onChange={(e) => setResult(e.target.value)}
           placeholder={program.unit === "seconds" ? "Например, 45" : "Например, 12"}
-          style={{ ...inputStyle, maxWidth: 260, marginBottom: 12 }}
+          style={{ ...inputStyle, maxWidth: 260, marginBottom: 12, fontSize: 16 }}
         />
 
         <div>

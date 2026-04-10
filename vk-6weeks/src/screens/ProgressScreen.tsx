@@ -4,8 +4,9 @@ import { buttonStyle, cardStyle, mutedTextStyle, pageTitleStyle } from "../compo
 import { programs } from "../data/programs";
 import { useAppStore } from "../store/appStore";
 import { getProgramTotalWorkouts } from "../utils/plan";
+import type { WorkoutLogItem } from "../types";
 
-const WEEKS_TO_SHOW = 6;
+const DAYS_TO_SHOW = 7;
 
 export default function ProgressScreen() {
   const navigate = useNavigate();
@@ -36,6 +37,7 @@ export default function ProgressScreen() {
 
   const activeProgram = startedPrograms[activeIndex] ?? null;
   const activeProgress = activeProgram ? progressMap[activeProgram.id] ?? null : null;
+
   const logs = useMemo(
     () =>
       [...(activeProgress?.workoutLogs ?? [])].sort(
@@ -44,7 +46,13 @@ export default function ProgressScreen() {
     [activeProgress]
   );
 
-  const weeklyActivity = useMemo(() => buildWeeklyActivity(logs), [logs]);
+  const allLogs = useMemo(() => {
+    return Object.values(progressMap)
+      .flatMap((item) => item?.workoutLogs ?? [])
+      .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+  }, [progressMap]);
+
+  const monthlyActivity = useMemo(() => buildMonthlyActivity(allLogs), [allLogs]);
 
   useEffect(() => {
     if (activeProgram && activeProgram.id !== activeProgramId) {
@@ -73,21 +81,49 @@ export default function ProgressScreen() {
   const completed = activeProgress?.completedWorkouts.length ?? 0;
   const total = activeProgram ? getProgramTotalWorkouts(activeProgram) : 0;
   const percent = total ? Math.round((completed / total) * 100) : 0;
+  const sliderWidthPercent = 100 / startedPrograms.length;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      <div
+        style={{
+          ...cardStyle,
+          minHeight: 96,
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        <h2 style={{ ...pageTitleStyle, marginBottom: 0 }}>Статистика</h2>
+      </div>
+
+      <section style={cardStyle}>
+        <div style={{ marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Активность за месяц</h2>
+          <p style={{ ...mutedTextStyle, marginTop: 8 }}>
+            Сколько тренировок ты выполнил за последние 4 недели по всем программам вместе.
+          </p>
+        </div>
+
+        <WeeklyChart items={monthlyActivity} />
+      </section>
+
       <section
         style={{
           ...cardStyle,
           padding: 16,
+          minHeight: 196,
+          display: "grid",
+          gridTemplateRows: "1fr auto auto",
+          gap: 14,
         }}
       >
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
+            display: "grid",
+            gridTemplateColumns: "42px minmax(0, 1fr) 42px",
             gap: 12,
+            alignItems: "center",
+            minHeight: 108,
           }}
         >
           <ArrowButton
@@ -96,11 +132,19 @@ export default function ProgressScreen() {
             }
             disabled={activeIndex === 0}
           >
-            ←
+            <ArrowLeftIcon />
           </ArrowButton>
 
-          <div style={{ textAlign: "center", minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 13, color: "var(--muted-text-color)", marginBottom: 4 }}>
+          <div
+            style={{
+              textAlign: "center",
+              minWidth: 0,
+              minHeight: 108,
+              display: "grid",
+              alignContent: "center",
+            }}
+          >
+            <div style={{ fontSize: 13, color: "var(--muted-text-color)", marginBottom: 6 }}>
               Текущая программа
             </div>
             <div
@@ -109,6 +153,12 @@ export default function ProgressScreen() {
                 fontWeight: 700,
                 lineHeight: 1.15,
                 color: "var(--text-color)",
+                minHeight: 76,
+                display: "-webkit-box",
+                WebkitBoxOrient: "vertical",
+                WebkitLineClamp: 3,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
               }}
             >
               {activeProgram?.title}
@@ -126,8 +176,32 @@ export default function ProgressScreen() {
             }
             disabled={activeIndex === startedPrograms.length - 1}
           >
-            →
+            <ArrowRightIcon />
           </ArrowButton>
+        </div>
+
+        <div
+          style={{
+            padding: 4,
+            borderRadius: 999,
+            background: "var(--soft-bg)",
+            position: "relative",
+            height: 14,
+            overflow: "hidden",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              top: 2,
+              bottom: 2,
+              left: `calc(${sliderWidthPercent * activeIndex}% + 2px)`,
+              width: `calc(${sliderWidthPercent}% - 4px)`,
+              borderRadius: 999,
+              background: "linear-gradient(90deg, var(--primary-color) 0%, var(--primary-strong) 100%)",
+              transition: "left 0.2s ease, width 0.2s ease",
+            }}
+          />
         </div>
 
         <div
@@ -136,7 +210,6 @@ export default function ProgressScreen() {
             borderRadius: 999,
             background: "var(--soft-bg)",
             overflow: "hidden",
-            marginTop: 16,
           }}
         >
           <div
@@ -149,17 +222,6 @@ export default function ProgressScreen() {
             }}
           />
         </div>
-      </section>
-
-      <section style={cardStyle}>
-        <div style={{ marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Активность по неделям</h2>
-          <p style={{ ...mutedTextStyle, marginTop: 8 }}>
-            Сколько тренировок ты сделал за последние 6 недель.
-          </p>
-        </div>
-
-        <WeeklyChart items={weeklyActivity} />
       </section>
 
       <section style={cardStyle}>
@@ -290,22 +352,17 @@ function WeeklyChart({
   const maxCount = Math.max(...items.map((item) => item.count), 1);
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gap: 10,
-      }}
-    >
+    <div style={{ display: "grid", gap: 10 }}>
       <div
         style={{
           display: "grid",
           gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`,
-          gap: 14,
-          minHeight: 176,
+          gap: 12,
+          minHeight: 180,
         }}
       >
         {items.map((item) => {
-          const height = item.count === 0 ? 18 : Math.max((item.count / maxCount) * 112, 28);
+          const height = item.count === 0 ? 14 : 14 + Math.round((item.count / maxCount) * 110);
 
           return (
             <div
@@ -316,7 +373,7 @@ function WeeklyChart({
                 justifyItems: "center",
                 alignItems: "end",
                 gap: 10,
-                minHeight: 176,
+                minHeight: 180,
               }}
             >
               <div
@@ -335,7 +392,7 @@ function WeeklyChart({
               <div
                 style={{
                   width: "100%",
-                  minHeight: 118,
+                  minHeight: 124,
                   display: "flex",
                   alignItems: "flex-end",
                   justifyContent: "center",
@@ -354,6 +411,7 @@ function WeeklyChart({
                         : "color-mix(in srgb, var(--soft-bg) 82%, var(--border-color) 18%)",
                     boxShadow:
                       item.count > 0 ? "0 10px 22px rgba(99, 102, 241, 0.22)" : "none",
+                    transition: "height 0.2s ease",
                   }}
                 />
               </div>
@@ -387,15 +445,52 @@ function ArrowButton({
         border: "1px solid var(--border-color)",
         background: disabled ? "var(--soft-bg)" : "var(--card-bg)",
         color: disabled ? "var(--muted-text-color)" : "var(--text-color)",
-        fontSize: 18,
-        fontWeight: 700,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.55 : 1,
         flexShrink: 0,
+        display: "grid",
+        placeItems: "center",
+        padding: 0,
       }}
     >
       {children}
     </button>
+  );
+}
+
+function ArrowLeftIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12.5 4.5 7 10l5.5 5.5" />
+    </svg>
+  );
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m7.5 4.5 5.5 5.5-5.5 5.5" />
+    </svg>
   );
 }
 
@@ -405,35 +500,28 @@ function splitMetric(values: number[]) {
     : `${values.slice(0, 4).join(" / ")}\n/ ${values.slice(4).join(" / ")}`;
 }
 
-function buildWeeklyActivity(
-  logs: Array<{
-    completedAt: string;
-  }>
-) {
-  const currentWeekStart = startOfWeek(new Date());
+function buildMonthlyActivity(logs: WorkoutLogItem[]) {
+  const today = startOfDay(new Date());
 
-  return Array.from({ length: WEEKS_TO_SHOW }, (_, index) => {
-    const weekStart = addDays(currentWeekStart, -(WEEKS_TO_SHOW - 1 - index) * 7);
-    const weekEnd = addDays(weekStart, 7);
+  return Array.from({ length: DAYS_TO_SHOW }, (_, index) => {
+    const dayStart = addDays(today, -(DAYS_TO_SHOW - 1 - index));
+    const dayEnd = addDays(dayStart, 1);
 
-    const count = logs.filter((log) => {
+    const workoutCount = logs.filter((log) => {
       const completedAt = new Date(log.completedAt);
-      return completedAt >= weekStart && completedAt < weekEnd;
+      return completedAt >= dayStart && completedAt < dayEnd;
     }).length;
 
     return {
-      label: formatShortDate(weekStart),
-      count,
+      label: formatShortDate(dayStart),
+      count: workoutCount,
     };
   });
 }
 
-function startOfWeek(date: Date) {
+function startOfDay(date: Date) {
   const next = new Date(date);
-  const day = next.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
   next.setHours(0, 0, 0, 0);
-  next.setDate(next.getDate() + diff);
   return next;
 }
 

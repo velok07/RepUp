@@ -117,10 +117,17 @@ export default function ProgramsScreen() {
                   justifyContent: "space-between",
                   gap: 12,
                   alignItems: "center",
-                  flexWrap: "wrap",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
                   <div
                     style={{
                       width: 48,
@@ -135,7 +142,7 @@ export default function ProgramsScreen() {
                     {group.icon}
                   </div>
 
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <h3 style={pageTitleStyle}>{group.title}</h3>
                     <p style={mutedTextStyle}>{group.description}</p>
                   </div>
@@ -143,7 +150,7 @@ export default function ProgramsScreen() {
 
                 <div
                   style={{
-                    minWidth: 44,
+                    width: 44,
                     height: 44,
                     borderRadius: 999,
                     display: "flex",
@@ -153,6 +160,7 @@ export default function ProgramsScreen() {
                     color: isOpen ? "var(--primary-strong)" : "var(--muted-text-color)",
                     fontSize: 22,
                     fontWeight: 700,
+                    flexShrink: 0,
                   }}
                 >
                   {isOpen ? "−" : "+"}

@@ -15,11 +15,21 @@ export default function App() {
   const theme = useAppStore((s) => s.settings.theme);
   const hydrated = useAppStore((s) => s.hydrated);
   const hydrate = useAppStore((s) => s.hydrate);
-  const activeWorkoutSession = useAppStore((s) => s.activeWorkoutSession);
+  const activeProgramId = useAppStore((s) => s.activeProgramId);
+  const activeWorkoutSessions = useAppStore((s) => s.activeWorkoutSessions);
+  const workoutSessions = Object.values(activeWorkoutSessions);
+  const activeWorkoutSession =
+    (activeProgramId ? activeWorkoutSessions[activeProgramId] : null) ??
+    workoutSessions[0] ??
+    null;
+
   const workoutReturnTarget = activeWorkoutSession
     ? `/workout/${activeWorkoutSession.programId}`
     : null;
-  const hasWorkoutToReturn = workoutReturnTarget !== null && location.pathname !== workoutReturnTarget;
+  const hasWorkoutToReturn =
+    workoutReturnTarget !== null && location.pathname !== workoutReturnTarget;
+  const isHomeScreen = location.pathname === "/";
+  const screenTitle = getScreenTitle(location.pathname);
 
   useEffect(() => {
     void hydrate();
@@ -44,11 +54,15 @@ export default function App() {
           placeItems: "center",
           color: "var(--text-color, #111)",
           background: "#f8fafc",
-          fontSize: 16,
-          fontWeight: 700,
+          padding: 24,
         }}
       >
-        Загрузка RepUp...
+        <div style={{ textAlign: "center", display: "grid", gap: 10 }}>
+          <div style={{ fontSize: 26, fontWeight: 900 }}>RepUp Beta</div>
+          <div style={{ fontSize: 15, color: "var(--muted-text-color, #64748b)" }}>
+            Спасибо, что помогаешь тестировать приложение
+          </div>
+        </div>
       </div>
     );
   }
@@ -72,73 +86,103 @@ export default function App() {
           flexDirection: "column",
         }}
       >
-        <header style={{ padding: "20px 16px 12px" }}>
-          <div
-            style={{
-              background: "var(--card-bg)",
-              border: "1px solid var(--border-color)",
-              borderRadius: 24,
-              padding: "16px 18px",
-              boxShadow: "var(--card-shadow)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 16,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <RepUpMark />
-
-              <div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--muted-text-color)",
-                    marginBottom: 6,
-                    fontWeight: 700,
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Fitness Progress
-                </div>
-                <div
-                  style={{
-                    fontSize: 28,
-                    fontWeight: 900,
-                    color: "var(--text-color)",
-                    lineHeight: 1,
-                    marginBottom: 4,
-                  }}
-                >
-                  RepUp
-                </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: "var(--muted-text-color)",
-                  }}
-                >
-                  Делай повторы. Повышай уровень.
-                </div>
-              </div>
-            </div>
-
+        <header
+          style={{
+            padding: isHomeScreen
+              ? "calc(env(safe-area-inset-top, 0px) + 44px) 16px 12px"
+              : "calc(env(safe-area-inset-top, 0px) + 52px) 16px 8px",
+          }}
+        >
+          {isHomeScreen ? (
             <div
               style={{
-                alignSelf: "flex-start",
-                padding: "8px 10px",
-                borderRadius: 999,
-                background: "var(--primary-soft-2)",
-                color: "var(--primary-strong)",
-                fontSize: 12,
-                fontWeight: 800,
-                whiteSpace: "nowrap",
+                background: "var(--card-bg)",
+                border: "1px solid var(--border-color)",
+                borderRadius: 24,
+                padding: "16px 18px",
+                boxShadow: "var(--card-shadow)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 16,
               }}
             >
-              v1.0 MVP
+              <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+                <RepUpMark />
+
+                <div style={{ minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "var(--muted-text-color)",
+                      marginBottom: 6,
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Fitness Progress
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 28,
+                      fontWeight: 900,
+                      color: "var(--text-color)",
+                      lineHeight: 1,
+                      marginBottom: 4,
+                    }}
+                  >
+                    RepUp
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "var(--muted-text-color)",
+                    }}
+                  >
+                    Делай повторы. Повышай уровень.
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  alignSelf: "flex-start",
+                  padding: "8px 10px",
+                  borderRadius: 999,
+                  background: "var(--primary-soft-2)",
+                  color: "var(--primary-strong)",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                v1.0 MVP
+              </div>
             </div>
-          </div>
+          ) : screenTitle ? (
+            <div
+              style={{
+                minHeight: 44,
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: 28,
+                  lineHeight: 1.05,
+                  fontWeight: 900,
+                  color: "var(--text-color)",
+                }}
+              >
+                {screenTitle}
+              </h1>
+            </div>
+          ) : (
+            <div style={{ minHeight: 12 }} />
+          )}
         </header>
 
         <main
@@ -184,7 +228,7 @@ export default function App() {
                     flexShrink: 0,
                   }}
                 >
-                  ⏱
+                  ↩
                 </span>
 
                 <span style={{ textAlign: "left" }}>
@@ -312,35 +356,32 @@ function NavItem({
 
 function RepUpMark() {
   return (
-    <div
+    <img
+      src="/repup-icon.png"
+      alt=""
       aria-hidden
       style={{
         width: 54,
         height: 54,
         borderRadius: 18,
-        background:
-          "linear-gradient(135deg, var(--primary-color) 0%, var(--primary-strong) 100%)",
+        objectFit: "cover",
         boxShadow: "0 14px 28px rgba(124, 92, 255, 0.28)",
-        display: "grid",
-        placeItems: "center",
-        color: "#fff",
-        fontWeight: 900,
-        position: "relative",
-        overflow: "hidden",
+        flexShrink: 0,
+        display: "block",
       }}
-    >
-      <span style={{ fontSize: 22, lineHeight: 1 }}>R</span>
-      <span
-        style={{
-          position: "absolute",
-          right: 10,
-          top: 8,
-          fontSize: 16,
-          fontWeight: 900,
-        }}
-      >
-        ↑
-      </span>
-    </div>
+    />
   );
+}
+
+function getScreenTitle(pathname: string) {
+  if (pathname.startsWith("/programs")) return null;
+  if (pathname.startsWith("/program/")) return "Программа";
+  if (pathname.startsWith("/level-test/")) return "Стартовый тест";
+  if (pathname.startsWith("/plan/")) return "План тренировки";
+  if (pathname.startsWith("/workout/")) return "Тренировка";
+  if (pathname.startsWith("/progress")) return null;
+  if (pathname.startsWith("/achievements")) return null;
+  if (pathname.startsWith("/profile")) return null;
+  if (pathname.startsWith("/result")) return "Результат";
+  return "RepUp";
 }

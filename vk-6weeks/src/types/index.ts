@@ -68,9 +68,24 @@ export interface UserStats {
   pendingAchievementIds: string[];
 }
 
+export interface ActiveWorkoutSession {
+  programId: ProgramType;
+  week: number;
+  day: number;
+  title: string;
+  currentStep: number;
+  actuals: number[];
+  resting: boolean;
+  restLeft: number;
+  restEndsAt: string | null;
+  editActual: boolean;
+  actualValue: string;
+}
+
 export interface UserProgramProgress {
   programId: ProgramType;
   level: number;
+  loadAdjustment: number;
   startedAt: string;
   currentWeek: number;
   currentDay: number;
@@ -86,23 +101,39 @@ export interface AchievementDefinition {
   description: string;
   icon: string;
   color: string;
+  category: AchievementCategory;
+  spotlight?: string;
+  exclusiveDate?: {
+    month: number;
+    day: number;
+  };
 }
 
 export interface AchievementProgress {
   unlockedIds: string[];
 }
 
+export type AchievementCategory =
+  | "push"
+  | "pull"
+  | "core"
+  | "legs"
+  | "static"
+  | "special";
+
 export interface AppUser {
   id: string | null;
   vkId: number | null;
   firstName?: string;
   lastName?: string;
+  photoUrl?: string;
 }
 
 export interface AppState {
   hydrated: boolean;
   user: AppUser;
   activeProgramId: ProgramType | null;
+  activeWorkoutSessions: Partial<Record<ProgramType, ActiveWorkoutSession>>;
   progress: Partial<Record<ProgramType, UserProgramProgress>>;
   settings: AppSettings;
   userStats: UserStats;
@@ -110,8 +141,11 @@ export interface AppState {
   hydrate: () => Promise<void>;
   setUser: (user: Partial<AppUser>) => void;
   setActiveProgram: (programId: ProgramType | null) => void;
+  setActiveWorkoutSession: (session: ActiveWorkoutSession | null) => void;
+  clearActiveWorkoutSession: (programId?: ProgramType) => void;
   updateSettings: (patch: Partial<AppSettings>) => void;
   startProgram: (programId: ProgramType, level: number) => void;
+  setProgramLoadAdjustment: (programId: ProgramType, loadAdjustment: number) => void;
   completeWorkout: (
     programId: ProgramType,
     payload: {

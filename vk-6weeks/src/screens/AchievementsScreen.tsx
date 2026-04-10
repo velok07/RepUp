@@ -1,8 +1,15 @@
 import { useMemo } from "react";
-import { achievements } from "../data/achievements";
+import { achievementCategoryMeta, achievements } from "../data/achievements";
 import { cardStyle, mutedTextStyle, pageTitleStyle } from "../components/ui";
 import { useAppStore } from "../store/appStore";
-import { calculateAchievementProgress } from "../utils/achievements";
+import {
+  calculateAchievementProgress,
+  ACHIEVEMENT_XP_REWARD,
+  getAchievementPresentation,
+} from "../utils/achievements";
+import type { AchievementCategory } from "../types";
+
+const categoryOrder: AchievementCategory[] = ["push", "pull", "core", "legs", "static", "special"];
 
 export default function AchievementsScreen() {
   const progressMap = useAppStore((s) => s.progress);
@@ -13,16 +20,28 @@ export default function AchievementsScreen() {
   );
 
   const unlockedIds = achievementProgress.unlockedIds;
+  const unlockedSet = useMemo(() => new Set(unlockedIds), [unlockedIds]);
 
   const groupedAchievements = useMemo(() => {
-    const unlockedSet = new Set(unlockedIds);
-    const unlocked = achievements.filter((item) => unlockedSet.has(item.id));
-    const locked = achievements.filter((item) => !unlockedSet.has(item.id));
+    return categoryOrder.map((category) => {
+      const items = achievements
+        .filter((item) => item.category === category)
+        .sort((a, b) => Number(unlockedSet.has(b.id)) - Number(unlockedSet.has(a.id)));
 
-    return { unlocked, locked };
-  }, [unlockedIds]);
+      const unlockedCount = items.filter((item) => unlockedSet.has(item.id)).length;
 
-  const percent = Math.round((unlockedIds.length / achievements.length) * 100);
+      return {
+        category,
+        meta: achievementCategoryMeta[category],
+        items,
+        unlockedCount,
+      };
+    });
+  }, [unlockedSet]);
+
+  const percent = achievements.length
+    ? Math.round((unlockedIds.length / achievements.length) * 100)
+    : 0;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -36,7 +55,8 @@ export default function AchievementsScreen() {
         <div>
           <h1 style={pageTitleStyle}>Достижения</h1>
           <p style={mutedTextStyle}>
-            Открыто {unlockedIds.length} из {achievements.length}. Сначала показаны уже открытые достижения.
+            Открыто {unlockedIds.length} из {achievements.length}. Эксклюзивные награды до нужной
+            даты скрыты как секретные.
           </p>
         </div>
 
@@ -67,104 +87,140 @@ export default function AchievementsScreen() {
               gap: 10,
             }}
           >
-            <StatCard label="Открыто" value={String(groupedAchievements.unlocked.length)} />
-            <StatCard label="Впереди" value={String(groupedAchievements.locked.length)} />
-            <StatCard label="Прогресс" value={`${percent}%`} />
+            <StatCard label="Открыто" value={String(unlockedIds.length)} />
+            <StatCard label="Осталось" value={String(achievements.length - unlockedIds.length)} />
+            <StatCard label="Награда" value={`+${ACHIEVEMENT_XP_REWARD} XP`} />
           </div>
         </div>
       </div>
 
-      <AchievementSection
-        title="Открыто"
-        subtitle="Твои уже заработанные награды"
-        items={groupedAchievements.unlocked}
-        unlockedIds={unlockedIds}
-        emptyText="Пока ещё нет открытых достижений. Первая успешная тренировка всё запустит."
-      />
-
-      <AchievementSection
-        title="Следующие цели"
-        subtitle="Простые ориентиры, которые помогут двигаться дальше"
-        items={groupedAchievements.locked}
-        unlockedIds={unlockedIds}
-        emptyText="Все достижения уже открыты. Это максимум."
-      />
-    </div>
-  );
-}
-
-function AchievementSection({
-  title,
-  subtitle,
-  items,
-  unlockedIds,
-  emptyText,
-}: {
-  title: string;
-  subtitle: string;
-  items: typeof achievements;
-  unlockedIds: string[];
-  emptyText: string;
-}) {
-  return (
-    <section style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "grid", gap: 4 }}>
-        <div
-          style={{
-            fontSize: 22,
-            fontWeight: 900,
-            color: "var(--text-color)",
-          }}
-        >
-          {title}
-        </div>
-        <div style={mutedTextStyle}>{subtitle}</div>
-      </div>
-
-      {items.length === 0 ? (
-        <div style={{ ...cardStyle, ...mutedTextStyle }}>{emptyText}</div>
-      ) : (
-        <div style={{ display: "grid", gap: 12 }}>
-          {items.map((achievement) => {
-            const unlocked = unlockedIds.includes(achievement.id);
-
-            return (
+      {groupedAchievements.map((group) => (
+        <section key={group.category} style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
               <div
-                key={achievement.id}
                 style={{
-                  ...cardStyle,
-                  display: "grid",
-                  gridTemplateColumns: "88px minmax(0, 1fr)",
-                  gap: 16,
-                  alignItems: "center",
-                  border: unlocked
-                    ? "1px solid var(--success-border)"
-                    : "1px solid var(--border-color)",
-                  background: unlocked
-                    ? "linear-gradient(180deg, var(--success-bg-soft) 0%, var(--card-bg) 100%)"
-                    : "var(--card-bg)",
-                  opacity: unlocked ? 1 : 0.95,
+                  fontSize: 22,
+                  fontWeight: 900,
+                  color: "var(--text-color)",
                 }}
               >
+                {group.meta.title}
+              </div>
+
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  background: "var(--soft-bg)",
+                  color: "var(--muted-text-color)",
+                }}
+              >
+                {group.unlockedCount}/{group.items.length}
+              </div>
+            </div>
+
+            <div style={mutedTextStyle}>{group.meta.description}</div>
+          </div>
+
+          <div style={{ display: "grid", gap: 12 }}>
+            {group.items.map((achievement) => {
+              const unlocked = unlockedSet.has(achievement.id);
+              const presentation = getAchievementPresentation(achievement, unlockedSet);
+
+              return (
                 <div
+                  key={achievement.id}
                   style={{
-                    width: 88,
-                    height: 88,
-                    borderRadius: 26,
+                    ...cardStyle,
                     display: "grid",
-                    placeItems: "center",
-                    fontSize: 42,
-                    background: unlocked ? achievement.color : "var(--soft-bg)",
-                    color: unlocked ? "#fff" : "var(--muted-text-color)",
-                    filter: unlocked ? "none" : "grayscale(0.28) saturate(0.76)",
-                    boxShadow: unlocked ? "0 12px 28px rgba(0,0,0,0.12)" : "none",
+                    gridTemplateColumns: "88px minmax(0, 1fr)",
+                    gap: 16,
+                    alignItems: "center",
+                    border: unlocked
+                      ? "1px solid var(--success-border)"
+                      : "1px solid var(--border-color)",
+                    background: unlocked
+                      ? "linear-gradient(180deg, var(--success-bg-soft) 0%, var(--card-bg) 100%)"
+                      : "var(--card-bg)",
+                    opacity: unlocked ? 1 : 0.96,
                   }}
                 >
-                  {achievement.icon}
-                </div>
+                  <div
+                    style={{
+                      width: 88,
+                      height: 88,
+                      borderRadius: 26,
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: 42,
+                      background: unlocked ? achievement.color : "var(--soft-bg)",
+                      color: unlocked ? "#fff" : "var(--muted-text-color)",
+                      filter: unlocked ? "none" : "grayscale(0.2) saturate(0.75)",
+                      boxShadow: unlocked ? "0 12px 28px rgba(0,0,0,0.12)" : "none",
+                    }}
+                  >
+                    {presentation.icon}
+                  </div>
 
-                <div style={{ minWidth: 0, display: "grid", gap: 10 }}>
-                  <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ minWidth: 0, display: "grid", gap: 10 }}>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 19,
+                            fontWeight: 900,
+                            lineHeight: 1.2,
+                            color: "var(--text-color)",
+                          }}
+                        >
+                          {presentation.title}
+                        </div>
+
+                        <div
+                          style={{
+                            padding: "7px 10px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 800,
+                            background: unlocked ? "var(--success-bg)" : "var(--soft-bg)",
+                            color: unlocked ? "var(--success-color)" : "var(--muted-text-color)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {unlocked ? "Открыто" : "Закрыто"}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          ...mutedTextStyle,
+                          lineHeight: 1.45,
+                          fontSize: 15,
+                        }}
+                      >
+                        {presentation.description}
+                      </div>
+                    </div>
+
                     <div
                       style={{
                         display: "flex",
@@ -176,72 +232,37 @@ function AchievementSection({
                     >
                       <div
                         style={{
-                          fontSize: 19,
-                          fontWeight: 900,
-                          lineHeight: 1.2,
-                          color: "var(--text-color)",
-                        }}
-                      >
-                        {achievement.title}
-                      </div>
-
-                      <div
-                        style={{
-                          padding: "7px 10px",
-                          borderRadius: 999,
-                          fontSize: 12,
-                          fontWeight: 800,
-                          background: unlocked ? "var(--success-bg)" : "var(--soft-bg)",
-                          color: unlocked ? "var(--success-color)" : "var(--muted-text-color)",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {unlocked ? "Открыто" : "Закрыто"}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        ...mutedTextStyle,
-                        lineHeight: 1.45,
-                        fontSize: 15,
-                      }}
-                    >
-                      {achievement.description}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "flex-end",
-                      gap: 12,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    {unlocked && (
-                      <div
-                        style={{
-                          padding: "8px 12px",
-                          borderRadius: 999,
                           fontSize: 13,
-                          fontWeight: 800,
-                          background: "var(--primary-soft-2)",
-                          color: "var(--primary-strong)",
+                          fontWeight: 700,
+                          color: "var(--muted-text-color)",
                         }}
                       >
-                        +50 XP
+                        {presentation.spotlight ?? group.meta.title}
                       </div>
-                    )}
+
+                      {unlocked && (
+                        <div
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: 999,
+                            fontSize: 13,
+                            fontWeight: 800,
+                            background: "var(--primary-soft-2)",
+                            color: "var(--primary-strong)",
+                          }}
+                        >
+                          +{ACHIEVEMENT_XP_REWARD} XP
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
   );
 }
 

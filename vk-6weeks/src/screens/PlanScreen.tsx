@@ -1,10 +1,14 @@
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { plansByProgram } from "../data/plans";
 import { programs } from "../data/programs";
 import { useAppStore } from "../store/appStore";
 import type { ProgramType } from "../types";
-import { makeWorkoutKey } from "../utils/plan";
+import {
+  getAdjustedPlanByLevel,
+  getLoadAdjustmentLabel,
+  LOAD_ADJUSTMENT_PRESETS,
+  makeWorkoutKey,
+} from "../utils/plan";
 import {
   buttonStyle,
   cardStyle,
@@ -17,6 +21,7 @@ export default function PlanScreen() {
   const { id } = useParams();
   const navigate = useNavigate();
   const setActiveProgram = useAppStore((s) => s.setActiveProgram);
+  const setProgramLoadAdjustment = useAppStore((s) => s.setProgramLoadAdjustment);
 
   const program = programs.find((item) => item.id === id);
   const progress = useAppStore((s) =>
@@ -25,7 +30,11 @@ export default function PlanScreen() {
 
   const allWorkouts = useMemo(() => {
     if (!progress || !id) return [];
-    return plansByProgram[id as ProgramType]?.[progress.level] ?? [];
+    return getAdjustedPlanByLevel(
+      id as ProgramType,
+      progress.level,
+      progress.loadAdjustment ?? 1
+    );
   }, [progress, id]);
 
   if (!progress || !id || !program) {
@@ -39,6 +48,7 @@ export default function PlanScreen() {
 
   const completedSet = new Set(progress.completedWorkouts);
   const currentKey = makeWorkoutKey(progress.currentWeek, progress.currentDay);
+  const currentLoadAdjustment = progress.loadAdjustment ?? 1;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -52,12 +62,44 @@ export default function PlanScreen() {
         }}
       >
         <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 8 }}>План программы</div>
-        <h2 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>
-          {program.durationWeeks} недель
-        </h2>
+        <h2 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>{program.durationWeeks} недель</h2>
         <p style={{ marginTop: 12, marginBottom: 14, opacity: 0.95 }}>
           Сейчас открыта: неделя {progress.currentWeek}, день {progress.currentDay}
         </p>
+
+        <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, opacity: 0.9 }}>
+            Корректировка нагрузки: {getLoadAdjustmentLabel(currentLoadAdjustment)}
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {LOAD_ADJUSTMENT_PRESETS.map((preset) => {
+              const isActive = currentLoadAdjustment === preset.value;
+
+              return (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => setProgramLoadAdjustment(program.id, preset.value)}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 999,
+                    border: isActive
+                      ? "1px solid rgba(255,255,255,0.72)"
+                      : "1px solid rgba(255,255,255,0.3)",
+                    background: isActive ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.1)",
+                    color: "#fff",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <button
@@ -126,6 +168,8 @@ export default function PlanScreen() {
                 const isCompleted = completedSet.has(key);
                 const isCurrent = !progress.finished && key === currentKey;
                 const log = progress.workoutLogs.find((item) => item.key === key);
+                const displayedTargets =
+                  log?.planned ?? dayWorkout.steps.map((step) => step.target);
 
                 let status = "Ожидает";
                 let bg = "var(--card-bg)";
@@ -188,7 +232,13 @@ export default function PlanScreen() {
                     </div>
 
                     <div style={{ marginTop: 12 }}>
-                      <div style={{ color: "var(--muted-text-color)", fontSize: 13, marginBottom: 8 }}>
+                      <div
+                        style={{
+                          color: "var(--muted-text-color)",
+                          fontSize: 13,
+                          marginBottom: 8,
+                        }}
+                      >
                         Подходы
                       </div>
 
@@ -199,9 +249,9 @@ export default function PlanScreen() {
                           gap: 8,
                         }}
                       >
-                        {dayWorkout.steps.map((step) => (
+                        {displayedTargets.map((target, index) => (
                           <div
-                            key={step.index}
+                            key={`${key}-${index}`}
                             style={{
                               textAlign: "center",
                               padding: "10px 8px",
@@ -211,7 +261,7 @@ export default function PlanScreen() {
                               fontWeight: 700,
                             }}
                           >
-                            {step.target}
+                            {target}
                           </div>
                         ))}
                       </div>
@@ -242,7 +292,9 @@ export default function PlanScreen() {
                             style={secondaryButtonStyle}
                             onClick={() => {
                               setActiveProgram(program.id);
-                              navigate(`/workout/${id}?week=${dayWorkout.week}&day=${dayWorkout.day}&repeat=1`);
+                              navigate(
+                                `/workout/${id}?week=${dayWorkout.week}&day=${dayWorkout.day}&repeat=1`
+                              );
                             }}
                           >
                             Повторить

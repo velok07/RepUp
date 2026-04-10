@@ -9,7 +9,7 @@ import {
   secondaryButtonStyle,
 } from "../components/ui";
 import { useAppStore } from "../store/appStore";
-import { calculateAchievementProgress } from "../utils/achievements";
+import { calculateAchievementProgress, getAchievementPresentation } from "../utils/achievements";
 import { getLevelFromXp, getXpProgress } from "../utils/level";
 import { getProgramTotalWorkouts } from "../utils/plan";
 
@@ -141,8 +141,8 @@ export default function HomeScreen() {
           <div style={{ fontSize: 14, opacity: 0.88, marginBottom: 8 }}>Добро пожаловать</div>
           <h2 style={{ margin: 0, fontSize: 30, lineHeight: 1.08 }}>RepUp</h2>
           <p style={{ marginTop: 12, marginBottom: 16, opacity: 0.95 }}>
-            Выбери программу, пройди стартовый тест и начни тренироваться по простому
-            и понятному плану.
+            Выбери программу, пройди стартовый тест и начни тренироваться по простому и
+            понятному плану.
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <button
@@ -269,11 +269,19 @@ export default function HomeScreen() {
 
           {effectivePrograms.length > 1 && (
             <div style={{ display: "flex", gap: 8 }}>
-              <IconButton ariaLabel="Предыдущая программа" onClick={goPrev} disabled={!canSlidePrev}>
-                ←
+              <IconButton
+                ariaLabel="Предыдущая программа"
+                onClick={goPrev}
+                disabled={!canSlidePrev}
+              >
+                <ArrowLeftIcon />
               </IconButton>
-              <IconButton ariaLabel="Следующая программа" onClick={goNext} disabled={!canSlideNext}>
-                →
+              <IconButton
+                ariaLabel="Следующая программа"
+                onClick={goNext}
+                disabled={!canSlideNext}
+              >
+                <ArrowRightIcon />
               </IconButton>
             </div>
           )}
@@ -294,22 +302,12 @@ export default function HomeScreen() {
               <div
                 style={{
                   display: "flex",
-                  alignItems: "flex-start",
-                  justifyContent: "space-between",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
                   gap: 12,
-                  marginBottom: 10,
+                  marginBottom: 12,
                 }}
               >
-                <div
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 500,
-                    color: "var(--muted-text-color)",
-                  }}
-                >
-                  Активная программа
-                </div>
-
                 <div
                   style={{
                     padding: "7px 10px",
@@ -351,7 +349,8 @@ export default function HomeScreen() {
                   marginBottom: 10,
                 }}
               >
-                Выполнено {currentProgress.completedWorkouts.length} из {getProgramTotalWorkouts(currentProgram)} тренировок
+                Выполнено {currentProgress.completedWorkouts.length} из{" "}
+                {getProgramTotalWorkouts(currentProgram)} тренировок
               </div>
 
               <div
@@ -405,7 +404,8 @@ export default function HomeScreen() {
                       minWidth: 132,
                       borderRadius: 16,
                       background: "var(--card-bg)",
-                      boxShadow: "0 12px 24px color-mix(in srgb, var(--text-color) 10%, transparent)",
+                      boxShadow:
+                        "0 12px 24px color-mix(in srgb, var(--text-color) 10%, transparent)",
                     }}
                     onClick={() => navigate(`/plan/${currentProgram.id}`)}
                   >
@@ -501,6 +501,10 @@ export default function HomeScreen() {
         >
           {visibleAchievements.map((achievement) => {
             const unlocked = achievementProgress.unlockedIds.includes(achievement.id);
+            const presentation = getAchievementPresentation(
+              achievement,
+              new Set(achievementProgress.unlockedIds)
+            );
 
             return (
               <div
@@ -532,7 +536,7 @@ export default function HomeScreen() {
                     boxShadow: unlocked ? "0 10px 24px rgba(0,0,0,0.12)" : "none",
                   }}
                 >
-                  {achievement.icon}
+                  {presentation.icon}
                 </div>
 
                 <div
@@ -543,7 +547,7 @@ export default function HomeScreen() {
                     lineHeight: 1.25,
                   }}
                 >
-                  {achievement.title}
+                  {presentation.title}
                 </div>
               </div>
             );
@@ -571,19 +575,56 @@ function IconButton({
       disabled={disabled}
       aria-label={ariaLabel}
       style={{
-        width: 38,
-        height: 38,
-        borderRadius: 12,
+        width: 40,
+        height: 40,
+        borderRadius: 14,
         border: "1px solid var(--border-color)",
         background: "var(--card-bg)",
         color: "var(--text-color)",
-        fontSize: 18,
-        fontWeight: 700,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.45 : 1,
+        display: "grid",
+        placeItems: "center",
+        padding: 0,
       }}
     >
       {children}
     </button>
+  );
+}
+
+function ArrowLeftIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12.5 4.5 7 10l5.5 5.5" />
+    </svg>
+  );
+}
+
+function ArrowRightIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m7.5 4.5 5.5 5.5-5.5 5.5" />
+    </svg>
   );
 }

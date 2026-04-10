@@ -14,6 +14,7 @@ export default function ProfileScreen() {
   const settings = useAppStore((s) => s.settings);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const progress = useAppStore((s) => s.progress);
+  const user = useAppStore((s) => s.user);
 
   const [confirmReset, setConfirmReset] = useState(false);
 
@@ -21,13 +22,87 @@ export default function ProfileScreen() {
     return Object.values(progress).some(Boolean);
   }, [progress]);
 
+  const displayName =
+    [user.firstName, user.lastName].filter(Boolean).join(" ").trim() || "Пользователь VK";
+
+  const initials = [user.firstName?.[0], user.lastName?.[0]]
+    .filter(Boolean)
+    .join("")
+    .toUpperCase();
+
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <div style={cardStyle}>
-        <h2 style={pageTitleStyle}>Профиль и настройки</h2>
-        <p style={mutedTextStyle}>
-          Настрой поведение тренировки, оформление и подготовь RepUp к ежедневному использованию.
-        </p>
+      <div
+        style={{
+          ...cardStyle,
+          minHeight: 96,
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        <h2 style={{ ...pageTitleStyle, marginBottom: 0 }}>Профиль и настройки</h2>
+      </div>
+
+      <div
+        style={{
+          ...cardStyle,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+        }}
+      >
+        {user.photoUrl ? (
+          <img
+            src={user.photoUrl}
+            alt={displayName}
+            style={{
+              width: 68,
+              height: 68,
+              borderRadius: "50%",
+              objectFit: "cover",
+              flexShrink: 0,
+              border: "2px solid color-mix(in srgb, var(--primary-color) 24%, transparent)",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 68,
+              height: 68,
+              borderRadius: "50%",
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              background:
+                "linear-gradient(135deg, var(--primary-color) 0%, var(--primary-strong) 100%)",
+              color: "#fff",
+              fontSize: 24,
+              fontWeight: 800,
+            }}
+          >
+            {initials || "VK"}
+          </div>
+        )}
+
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, color: "var(--muted-text-color)", marginBottom: 6 }}>
+            Профиль VK
+          </div>
+          <div
+            style={{
+              fontSize: 24,
+              fontWeight: 700,
+              lineHeight: 1.15,
+              color: "var(--text-color)",
+              marginBottom: 6,
+            }}
+          >
+            {displayName}
+          </div>
+          <div style={{ ...mutedTextStyle, fontSize: 14 }}>
+            {user.vkId ? `VK ID: ${user.vkId}` : "Данные профиля загрузятся после авторизации"}
+          </div>
+        </div>
       </div>
 
       <div
@@ -57,8 +132,7 @@ export default function ProfileScreen() {
               display: "inline-flex",
               alignItems: "center",
               gap: 10,
-              background:
-                settings.theme === "light" ? "var(--primary-soft)" : "var(--card-bg)",
+              background: settings.theme === "light" ? "var(--primary-soft)" : "var(--card-bg)",
               border:
                 settings.theme === "light"
                   ? "1px solid var(--primary-color)"
@@ -80,8 +154,7 @@ export default function ProfileScreen() {
               display: "inline-flex",
               alignItems: "center",
               gap: 10,
-              background:
-                settings.theme === "dark" ? "var(--primary-soft-2)" : "var(--card-bg)",
+              background: settings.theme === "dark" ? "var(--primary-soft-2)" : "var(--card-bg)",
               border:
                 settings.theme === "dark"
                   ? "1px solid var(--primary-color)"

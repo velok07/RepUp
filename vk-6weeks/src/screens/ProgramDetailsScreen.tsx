@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { programs } from "../data/programs";
 import { useAppStore } from "../store/appStore";
-import { getProgramTotalWorkouts } from "../utils/plan";
+import { getLoadAdjustmentLabel, getProgramTotalWorkouts } from "../utils/plan";
 import {
   buttonStyle,
   cardStyle,
@@ -71,12 +71,8 @@ export default function ProgramDetailsScreen() {
           border: "none",
         }}
       >
-        <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 8 }}>
-          Программа
-        </div>
-        <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.1 }}>
-          {program.title}
-        </h1>
+        <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 8 }}>Программа</div>
+        <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.1 }}>{program.title}</h1>
         <p style={{ marginTop: 12, marginBottom: 0, opacity: 0.95 }}>
           {program.durationWeeks} нед. · {program.workoutsPerWeek} трен./нед. ·{" "}
           {program.unit === "seconds" ? "на время" : "на повторения"}
@@ -99,10 +95,7 @@ export default function ProgramDetailsScreen() {
           }}
         >
           <InfoCard label="Длительность" value={`${program.durationWeeks} нед.`} />
-          <InfoCard
-            label="Тренировок в неделю"
-            value={String(program.workoutsPerWeek)}
-          />
+          <InfoCard label="Тренировок в неделю" value={String(program.workoutsPerWeek)} />
           <InfoCard
             label="Формат"
             value={program.unit === "seconds" ? "На время" : "На повторения"}
@@ -177,6 +170,12 @@ export default function ProgramDetailsScreen() {
                 ? ` · Сейчас: неделя ${progress.currentWeek}, день ${progress.currentDay}`
                 : ""}
             </div>
+
+            {progress ? (
+              <div style={{ marginTop: 8, ...mutedTextStyle }}>
+                Нагрузка: {getLoadAdjustmentLabel(progress.loadAdjustment ?? 1)}
+              </div>
+            ) : null}
           </>
         ) : (
           <p style={mutedTextStyle}>
@@ -201,10 +200,7 @@ export default function ProgramDetailsScreen() {
             Смотреть план
           </button>
 
-          <button
-            style={secondaryButtonStyle}
-            onClick={() => navigate("/programs")}
-          >
+          <button style={secondaryButtonStyle} onClick={() => navigate("/programs")}>
             Назад к программам
           </button>
         </div>
@@ -223,9 +219,7 @@ function InfoCard({ label, value }: { label: string; value: string }) {
         padding: 14,
       }}
     >
-      <div style={{ color: "var(--muted-text-color)", marginBottom: 6 }}>
-        {label}
-      </div>
+      <div style={{ color: "var(--muted-text-color)", marginBottom: 6 }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 800 }}>{value}</div>
     </div>
   );

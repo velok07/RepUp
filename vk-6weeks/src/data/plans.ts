@@ -43,7 +43,8 @@ function generateRepPlan(base: number, weeklyGrowth: number): PlanMap {
 
     for (let week = 1; week <= 8; week++) {
       for (let day = 1; day <= 3; day++) {
-        const offset = (week - 1) * weeklyGrowth + (day - 1);
+        const workoutIndex = (week - 1) * 3 + (day - 1);
+        const offset = Math.round(workoutIndex * ((weeklyGrowth + 2) / 3));
 
         const values = [
           levelBase + offset,
@@ -72,7 +73,8 @@ function generateTimePlan(base: number, weeklyGrowth: number): PlanMap {
 
     for (let week = 1; week <= 8; week++) {
       for (let day = 1; day <= 3; day++) {
-        const offset = (week - 1) * weeklyGrowth + (day - 1) * 2;
+        const workoutIndex = (week - 1) * 3 + (day - 1);
+        const offset = Math.round(workoutIndex * ((weeklyGrowth + 4) / 3));
 
         const values = [
           levelBase + offset,

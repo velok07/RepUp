@@ -66,6 +66,18 @@ function getStoredVkId() {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function getRawLaunchParams() {
+  const raw = window.location.search.startsWith("?")
+    ? window.location.search.slice(1)
+    : window.location.search;
+
+  if (!raw.includes("vk_user_id=") || !raw.includes("sign=")) {
+    return null;
+  }
+
+  return raw;
+}
+
 function setStoredToken(token: string, vkId?: number | null) {
   localStorage.setItem("repup_token", token);
 
@@ -196,6 +208,7 @@ async function resolveVkIdentity() {
 
 async function ensureAuth(): Promise<string | null> {
   const vkIdentity = await resolveVkIdentity();
+  const rawLaunchParams = getRawLaunchParams();
   const existingToken = getStoredToken();
   const storedVkId = getStoredVkId();
   const isProdFallbackToken =
@@ -225,6 +238,11 @@ async function ensureAuth(): Promise<string | null> {
     return null;
   }
 
+  if (!rawLaunchParams && !isLocalDevelopmentHost()) {
+    console.warn("[RepUp] signed launch params are missing, auth skipped");
+    return null;
+  }
+
   try {
     console.log("[RepUp] auth request start");
 
@@ -234,9 +252,14 @@ async function ensureAuth(): Promise<string | null> {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(rawLaunchParams
+            ? { Authorization: `Bearer ${rawLaunchParams}` }
+            : isLocalDevelopmentHost()
+              ? { "X-RepUp-Dev-Auth": "1" }
+              : {}),
         },
         body: JSON.stringify({
-          vkId: vkIdentity.vkId,
+          ...(rawLaunchParams ? {} : { vkId: vkIdentity.vkId }),
           firstName: vkIdentity.firstName,
           lastName: vkIdentity.lastName,
         }),
