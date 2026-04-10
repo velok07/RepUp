@@ -318,6 +318,9 @@ router.put("/state", authMiddleware, async (req, res) => {
           });
         }
       }
+    }, {
+      maxWait: 10000,
+      timeout: 20000,
     });
 
     return res.json({ ok: true });
@@ -368,6 +371,9 @@ router.post("/reset", authMiddleware, async (req, res) => {
           pendingAchievementIds: [],
         },
       });
+    }, {
+      maxWait: 10000,
+      timeout: 20000,
     });
 
     return res.json({ ok: true });
