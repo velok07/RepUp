@@ -79,6 +79,17 @@ function clearStoredToken() {
   localStorage.removeItem("repup_vk_id");
 }
 
+function clearSessionIdentity() {
+  clearStoredToken();
+
+  useAppStore.setState((state) => ({
+    user: {
+      ...state.user,
+      id: null,
+    },
+  }));
+}
+
 async function fetchWithTimeout(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -289,8 +300,13 @@ async function authorizedRequest(
 
   if (res.status === 401 && allowRetry) {
     console.warn("[RepUp] token rejected, re-auth");
-    clearStoredToken();
+    clearSessionIdentity();
     return authorizedRequest(input, init, false);
+  }
+
+  if (res.status === 401) {
+    console.warn("[RepUp] session is still invalid after retry");
+    clearSessionIdentity();
   }
 
   return res;
@@ -312,6 +328,11 @@ export const appApi = {
 
       if (res.status === 404) {
         console.warn("[RepUp] no remote state yet");
+        return DEFAULT_STATE;
+      }
+
+      if (res.status === 401) {
+        console.warn("[RepUp] invalid session on load, fallback to default state");
         return DEFAULT_STATE;
       }
 
@@ -350,6 +371,11 @@ export const appApi = {
     try {
       console.log("[RepUp] save response", res.status);
 
+      if (res.status === 401) {
+        console.warn("[RepUp] invalid session on save, waiting for next auth cycle");
+        return;
+      }
+
       if (!res.ok) {
         const text = await res.text();
         console.error("[RepUp] save failed", text);
@@ -377,6 +403,11 @@ export const appApi = {
 
     try {
       console.log("[RepUp] clear response", res.status);
+
+      if (res.status === 401) {
+        console.warn("[RepUp] invalid session on clear, waiting for next auth cycle");
+        return;
+      }
 
       if (!res.ok) {
         const text = await res.text();
