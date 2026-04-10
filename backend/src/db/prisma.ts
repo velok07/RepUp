@@ -7,12 +7,13 @@ import { Pool } from "pg";
 const { PrismaPg } = require("@prisma/adapter-pg");
 
 const connectionString = process.env.DATABASE_URL;
+const backendRoot = path.resolve(__dirname, "..", "..");
 
 if (!connectionString) {
   throw new Error("DATABASE_URL is not set");
 }
 
-const certificatePath = path.resolve(process.cwd(), "certs", "timeweb-ca.crt");
+const certificatePath = path.resolve(backendRoot, "certs", "timeweb-ca.crt");
 const ssl =
   fs.existsSync(certificatePath)
     ? {
@@ -30,6 +31,8 @@ const pool = new Pool({
   user: decodeURIComponent(databaseUrl.username),
   password: decodeURIComponent(databaseUrl.password),
   ssl,
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 10000,
 });
 
 const adapter = new PrismaPg(pool, {
