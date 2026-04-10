@@ -3,6 +3,7 @@ require("dotenv/config");
 const fs = require("node:fs");
 const path = require("node:path");
 const { Pool } = require("pg");
+const backendRoot = path.resolve(__dirname, "..");
 
 function createPool() {
   const connectionString = process.env.DATABASE_URL;
@@ -12,13 +13,18 @@ function createPool() {
   }
 
   const databaseUrl = new URL(connectionString);
-  const certificatePath = path.resolve(process.cwd(), "certs", "timeweb-ca.crt");
-  const ssl = fs.existsSync(certificatePath)
-    ? {
-        ca: fs.readFileSync(certificatePath, "utf8"),
-        rejectUnauthorized: true,
-      }
-    : undefined;
+  const certificatePath = path.resolve(backendRoot, "certs", "timeweb-ca.crt");
+  const sslMode = databaseUrl.searchParams.get("sslmode")?.toLowerCase();
+  const hasCertificate = fs.existsSync(certificatePath);
+  const ssl =
+    sslMode === "require"
+      ? { rejectUnauthorized: false }
+      : hasCertificate
+        ? {
+            ca: fs.readFileSync(certificatePath, "utf8"),
+            rejectUnauthorized: true,
+          }
+        : undefined;
 
   return new Pool({
     host: databaseUrl.hostname,
@@ -27,6 +33,8 @@ function createPool() {
     user: decodeURIComponent(databaseUrl.username),
     password: decodeURIComponent(databaseUrl.password),
     ssl,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 10000,
   });
 }
 
@@ -43,7 +51,7 @@ async function main() {
     }
 
     const migrationPath = path.resolve(
-      process.cwd(),
+      backendRoot,
       "prisma",
       "migrations",
       "20260329082504_init",
