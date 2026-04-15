@@ -409,6 +409,27 @@ export default function WorkoutScreen() {
     completeRest();
   };
 
+  const persistCurrentSession = () => {
+    if (!id || !workout || !started || finished) return;
+
+    setActiveWorkoutSession({
+      programId: id as ProgramType,
+      week: workout.week,
+      day: workout.day,
+      title: workout.title,
+      currentStep,
+      actuals,
+      stepTimerRunning,
+      stepTimeLeft,
+      stepTimerEndsAt,
+      resting,
+      restLeft,
+      restEndsAt,
+      editActual,
+      actualValue,
+    });
+  };
+
   const leaveScreen = (path: string) => {
     clearPendingAchievements();
     setShowAchievementToast(false);
@@ -735,6 +756,7 @@ export default function WorkoutScreen() {
           secondaryLabel="Выйти без сохранения"
           cancelLabel="Отмена"
           onPrimary={() => {
+            persistCurrentSession();
             setShowExitDialog(false);
             leaveScreen(`/plan/${id}`);
           }}

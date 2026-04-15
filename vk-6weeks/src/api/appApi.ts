@@ -12,6 +12,7 @@ import { useAppStore } from "../store/appStore";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const LOCAL_STATE_KEY = "repup_persisted_state";
+let hasSuccessfulRemoteLoad = false;
 
 export type PersistedAppState = {
   user?: AppUser;
@@ -147,6 +148,44 @@ function writeLocalState(state: PersistedAppState) {
   } catch (error) {
     console.warn("[RepUp] failed to write local persisted state", error);
   }
+}
+
+function isMeaningfullyEmptyState(state: PersistedAppState | null | undefined) {
+  if (!state) return true;
+
+  const hasProgress = Object.keys(state.progress ?? {}).length > 0;
+  const hasActiveSessions = Object.keys(state.activeWorkoutSessions ?? {}).length > 0;
+  const hasActiveProgram = Boolean(state.activeProgramId);
+  const hasXp = (state.userStats?.xp ?? 0) > 0;
+  const hasAchievementState =
+    (state.userStats?.rewardedAchievementIds?.length ?? 0) > 0 ||
+    (state.userStats?.pendingAchievementIds?.length ?? 0) > 0;
+
+  return !(hasProgress || hasActiveSessions || hasActiveProgram || hasXp || hasAchievementState);
+}
+
+function applyPersistedStateToStore(state: PersistedAppState) {
+  const currentState = useAppStore.getState();
+
+  useAppStore.setState({
+    user: {
+      ...currentState.user,
+      ...(state.user ?? {}),
+    },
+    activeProgramId: state.activeProgramId ?? null,
+    activeWorkoutSessions: state.activeWorkoutSessions ?? {},
+    progress: state.progress ?? {},
+    settings: {
+      ...currentState.settings,
+      ...(state.settings ?? {}),
+    },
+    userStats: {
+      ...currentState.userStats,
+      ...(state.userStats ?? {}),
+      rewardedAchievementIds: state.userStats?.rewardedAchievementIds ?? [],
+      pendingAchievementIds: state.userStats?.pendingAchievementIds ?? [],
+    },
+  });
 }
 
 async function fetchWithTimeout(
@@ -382,40 +421,37 @@ async function authorizedRequest(
   return res;
 }
 
+async function loadRemoteState(): Promise<PersistedAppState | null> {
+  const res = await authorizedRequest(`${API_URL}/me/state`);
+
+  if (!res) {
+    return null;
+  }
+
+  if (res.status === 404 || res.status === 401 || !res.ok) {
+    return null;
+  }
+
+  const data = (await res.json()) as PersistedAppState;
+  hasSuccessfulRemoteLoad = true;
+  return data;
+}
+
 export const appApi = {
   async load(): Promise<PersistedAppState | null> {
     console.log("[RepUp] appApi.load start", API_URL);
 
-    const res = await authorizedRequest(`${API_URL}/me/state`);
-
-    if (!res) {
-      console.warn("[RepUp] no token, using local fallback state");
-      return readLocalState();
-    }
-
     try {
-      console.log("[RepUp] /me/state response", res.status);
+      const remoteState = await loadRemoteState();
 
-      if (res.status === 404) {
-        console.warn("[RepUp] no remote state yet");
+      if (!remoteState) {
+        console.warn("[RepUp] remote state unavailable, using local fallback state");
         return readLocalState();
       }
 
-      if (res.status === 401) {
-        console.warn("[RepUp] invalid session on load, fallback to local state");
-        return readLocalState();
-      }
-
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("[RepUp] load failed", text);
-        return readLocalState();
-      }
-
-      const data = (await res.json()) as PersistedAppState;
-      writeLocalState(data);
-      console.log("[RepUp] state loaded", data);
-      return data;
+      writeLocalState(remoteState);
+      console.log("[RepUp] state loaded", remoteState);
+      return remoteState;
     } catch (error) {
       console.error("[RepUp] load request failed", error);
       return readLocalState();
@@ -424,6 +460,21 @@ export const appApi = {
 
   async save(state: PersistedAppState): Promise<void> {
     writeLocalState(state);
+
+    if (!hasSuccessfulRemoteLoad && isMeaningfullyEmptyState(state)) {
+      try {
+        const remoteState = await loadRemoteState();
+
+        if (remoteState && !isMeaningfullyEmptyState(remoteState)) {
+          console.warn("[RepUp] prevented empty local state from overwriting remote progress");
+          writeLocalState(remoteState);
+          applyPersistedStateToStore(remoteState);
+          return;
+        }
+      } catch (error) {
+        console.warn("[RepUp] remote reconciliation before save failed", error);
+      }
+    }
 
     const res = await authorizedRequest(
       `${API_URL}/me/state`,
@@ -455,6 +506,7 @@ export const appApi = {
         return;
       }
 
+      hasSuccessfulRemoteLoad = true;
       console.log("[RepUp] remote save ok");
     } catch (error) {
       console.error("[RepUp] save request failed", error);

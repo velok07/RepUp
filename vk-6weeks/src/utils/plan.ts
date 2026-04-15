@@ -10,7 +10,18 @@ export const LOAD_ADJUSTMENT_PRESETS = [
 export function getLevelByResult(programId: ProgramType, result: number): number {
   const levels = levelsByProgram[programId] ?? [];
   const found = levels.find((item) => result >= item.min && result <= item.max);
-  return found?.level ?? 1;
+  if (found) return found.level;
+
+  if (levels.length === 0) return 1;
+
+  const sortedLevels = levels.slice().sort((a, b) => a.min - b.min);
+  const firstLevel = sortedLevels[0];
+  const lastLevel = sortedLevels[sortedLevels.length - 1];
+
+  if (result < firstLevel.min) return firstLevel.level;
+  if (result > lastLevel.max) return lastLevel.level;
+
+  return 1;
 }
 
 export function getInitialLoadAdjustment(programId: ProgramType, result: number) {
