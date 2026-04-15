@@ -1,5 +1,11 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { buttonStyle, cardStyle, mutedTextStyle, pageTitleStyle, secondaryButtonStyle } from "../components/ui";
+import {
+  buttonStyle,
+  cardStyle,
+  mutedTextStyle,
+  pageTitleStyle,
+  secondaryButtonStyle,
+} from "../components/ui";
 
 type ResultLocationState = {
   title: string;
@@ -20,17 +26,23 @@ export default function ResultScreen() {
     return (
       <div style={cardStyle}>
         <h2 style={pageTitleStyle}>Результат недоступен</h2>
-        <p style={mutedTextStyle}>Похоже, тренировка уже завершилась раньше. Открой главный экран или прогресс.</p>
+        <p style={mutedTextStyle}>
+          Похоже, эта тренировка уже завершилась раньше. Открой главную страницу или прогресс.
+        </p>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <button style={buttonStyle} onClick={() => navigate("/")}>На главную</button>
-          <button style={secondaryButtonStyle} onClick={() => navigate("/progress")}>Прогресс</button>
+          <button style={buttonStyle} onClick={() => navigate("/")}>
+            На главную
+          </button>
+          <button style={secondaryButtonStyle} onClick={() => navigate("/progress")}>
+            Прогресс
+          </button>
         </div>
       </div>
     );
   }
 
   const isSuccess = result.actualTotal >= result.plannedTotal;
-  const shortUnit = "повт";
+  const shortUnit = "повт.";
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -48,7 +60,9 @@ export default function ResultScreen() {
           {isSuccess ? "Тренировка завершена" : "Попробуй ещё раз"}
         </h2>
         <p style={{ marginTop: 0, marginBottom: 4 }}>{result.title}</p>
-        <p style={{ marginTop: 0, opacity: 0.9 }}>Неделя {result.week}, день {result.day}</p>
+        <p style={{ marginTop: 0, opacity: 0.9 }}>
+          Неделя {result.week}, день {result.day}
+        </p>
 
         <div
           style={{
@@ -58,24 +72,41 @@ export default function ResultScreen() {
             marginTop: 16,
           }}
         >
-          <MetricCard label="План" value={`${result.plannedTotal} ${shortUnit}`} />
-          <MetricCard label="Факт" value={`${result.actualTotal} ${shortUnit}`} />
-          <MetricCard label="XP" value={`+${result.gainedXp}`} />
+          <MetricCard label="По плану" value={`${result.plannedTotal} ${shortUnit}`} />
+          <MetricCard label="Сделано" value={`${result.actualTotal} ${shortUnit}`} />
+          <MetricCard label="Получено XP" value={`+${result.gainedXp}`} />
         </div>
       </div>
 
       {result.achievementTitle ? (
-        <div style={{ ...cardStyle, borderColor: "var(--success-border)", background: "var(--success-bg-soft)" }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: "var(--success-color)", marginBottom: 6 }}>
-            🏆 Новое достижение
+        <div
+          style={{
+            ...cardStyle,
+            borderColor: "var(--success-border)",
+            background: "var(--success-bg-soft)",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 800,
+              color: "var(--success-color)",
+              marginBottom: 6,
+            }}
+          >
+            Новое достижение
           </div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>{result.achievementTitle}</div>
         </div>
       ) : null}
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <button style={buttonStyle} onClick={() => navigate("/")}>Продолжить</button>
-        <button style={secondaryButtonStyle} onClick={() => navigate("/progress")}>Посмотреть прогресс</button>
+        <button style={buttonStyle} onClick={() => navigate("/")}>
+          Продолжить
+        </button>
+        <button style={secondaryButtonStyle} onClick={() => navigate("/progress")}>
+          Посмотреть прогресс
+        </button>
       </div>
     </div>
   );

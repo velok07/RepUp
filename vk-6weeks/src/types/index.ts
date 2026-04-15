@@ -75,6 +75,9 @@ export interface ActiveWorkoutSession {
   title: string;
   currentStep: number;
   actuals: number[];
+  stepTimerRunning?: boolean;
+  stepTimeLeft?: number;
+  stepTimerEndsAt?: string | null;
   resting: boolean;
   restLeft: number;
   restEndsAt: string | null;
@@ -144,7 +147,7 @@ export interface AppState {
   setActiveWorkoutSession: (session: ActiveWorkoutSession | null) => void;
   clearActiveWorkoutSession: (programId?: ProgramType) => void;
   updateSettings: (patch: Partial<AppSettings>) => void;
-  startProgram: (programId: ProgramType, level: number) => void;
+  startProgram: (programId: ProgramType, level: number, loadAdjustment?: number) => void;
   setProgramLoadAdjustment: (programId: ProgramType, loadAdjustment: number) => void;
   completeWorkout: (
     programId: ProgramType,
@@ -153,6 +156,9 @@ export interface AppState {
       day: number;
       planned: number[];
       actual: number[];
+    },
+    options?: {
+      preserveProgress?: boolean;
     }
   ) => void;
   failWorkout: (
@@ -162,6 +168,9 @@ export interface AppState {
       day: number;
       planned: number[];
       actual: number[];
+    },
+    options?: {
+      preserveProgress?: boolean;
     }
   ) => void;
   syncAchievementRewards: (unlockedIds: string[]) => void;

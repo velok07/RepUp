@@ -38,19 +38,19 @@ body,
   margin: 0;
   padding: 0;
   min-height: 100%;
-  font-family: Inter, Arial, sans-serif;
+  font-family: "Manrope", Inter, Arial, sans-serif;
   background: var(--app-bg);
   color: var(--text-color);
 }
 
 body.dark {
   --app-bg: #020617;
-  --text-color: #e2e8f0;
-  --muted-text-color: #94a3b8;
+  --text-color: #f1f5f9;
+  --muted-text-color: #cbd5e1;
 
-  --card-bg: rgba(15, 23, 42, 0.96);
-  --border-color: #334155;
-  --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  --card-bg: rgba(15, 23, 42, 0.98);
+  --border-color: #475569;
+  --card-shadow: 0 12px 34px rgba(0, 0, 0, 0.34);
 
   --primary-color: #8b5cf6;
   --primary-strong: #60a5fa;
@@ -84,4 +84,14 @@ body.dark {
 button,
 input {
   font: inherit;
+}
+
+button:hover {
+  filter: brightness(1.03);
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary-color) 74%, white 26%);
+  outline-offset: 2px;
 }

@@ -12,6 +12,7 @@ model User {
   firstName       String?
   lastName        String?
   activeProgramId String?
+  activeWorkoutSessions Json?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
@@ -46,6 +47,7 @@ model ProgramProgress {
   userId             String
   programId          String
   level              Int
+  loadAdjustment     Float    @default(1)
   startedAt          DateTime
   currentWeek        Int
   currentDay         Int

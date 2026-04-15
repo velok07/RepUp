@@ -4,13 +4,14 @@ import { programs } from "../data/programs";
 import { useAppStore } from "../store/appStore";
 import type { ProgramType } from "../types";
 import { parsePositiveInt, sanitizeDigitsInput } from "../utils/numeric";
-import { getLevelByResult } from "../utils/plan";
+import { getInitialLoadAdjustment, getLevelByResult } from "../utils/plan";
 import {
   buttonStyle,
   cardStyle,
   inputStyle,
   mutedTextStyle,
   pageTitleStyle,
+  secondaryButtonStyle,
 } from "../components/ui";
 
 export default function LevelTestScreen() {
@@ -31,12 +32,20 @@ export default function LevelTestScreen() {
     if (!hasValidResult) return;
 
     const level = getLevelByResult(id as ProgramType, parsedResult);
-    startProgram(id as ProgramType, level);
+    const loadAdjustment = getInitialLoadAdjustment(id as ProgramType, parsedResult);
+
+    startProgram(id as ProgramType, level, loadAdjustment);
     navigate(`/workout/${id}`);
   };
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      <div style={{ display: "flex", justifyContent: "flex-start" }}>
+        <button style={secondaryButtonStyle} onClick={() => navigate(`/program/${id}`)}>
+          Назад
+        </button>
+      </div>
+
       <div
         style={{
           ...cardStyle,
@@ -46,9 +55,7 @@ export default function LevelTestScreen() {
           border: "none",
         }}
       >
-        <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 8 }}>
-          Стартовый тест
-        </div>
+        <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 8 }}>Стартовый тест</div>
         <h2 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>{program.title}</h2>
         <p style={{ marginTop: 12, marginBottom: 0, opacity: 0.95 }}>
           Определи текущий уровень и получи персональный план.
@@ -69,6 +76,14 @@ export default function LevelTestScreen() {
           pattern="[0-9]*"
           value={result}
           onChange={(e) => setResult(sanitizeDigitsInput(e.target.value, 4))}
+          onKeyDown={(event) => {
+            if (["-", "+", "e", "E", ".", ","].includes(event.key)) {
+              event.preventDefault();
+            }
+          }}
+          onWheel={(event) => {
+            event.currentTarget.blur();
+          }}
           placeholder={program.unit === "seconds" ? "Например, 45" : "Например, 12"}
           aria-invalid={result.length > 0 && !hasValidResult}
           style={{
@@ -88,6 +103,10 @@ export default function LevelTestScreen() {
             Введи целое число больше 0.
           </p>
         ) : null}
+
+        <p style={{ ...mutedTextStyle, marginTop: 0, marginBottom: 16 }}>
+          Если стартовый результат низкий, программа автоматически начнётся в щадящем режиме.
+        </p>
 
         <div>
           <button

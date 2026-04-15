@@ -1,6 +1,7 @@
 import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { achievementCategoryMeta, achievements } from "../data/achievements";
-import { cardStyle, mutedTextStyle, pageTitleStyle } from "../components/ui";
+import { cardStyle, mutedTextStyle, pageTitleStyle, secondaryButtonStyle } from "../components/ui";
 import { useAppStore } from "../store/appStore";
 import {
   calculateAchievementProgress,
@@ -12,6 +13,7 @@ import type { AchievementCategory } from "../types";
 const categoryOrder: AchievementCategory[] = ["push", "pull", "core", "legs", "static", "special"];
 
 export default function AchievementsScreen() {
+  const navigate = useNavigate();
   const progressMap = useAppStore((s) => s.progress);
 
   const achievementProgress = useMemo(
@@ -45,6 +47,12 @@ export default function AchievementsScreen() {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      <div style={{ display: "flex", justifyContent: "flex-start" }}>
+        <button style={secondaryButtonStyle} onClick={() => navigate(-1)}>
+          Назад
+        </button>
+      </div>
+
       <div
         style={{
           ...cardStyle,
@@ -55,8 +63,8 @@ export default function AchievementsScreen() {
         <div>
           <h1 style={pageTitleStyle}>Достижения</h1>
           <p style={mutedTextStyle}>
-            Открыто {unlockedIds.length} из {achievements.length}. Эксклюзивные награды до нужной
-            даты скрыты как секретные.
+            Открыто {unlockedIds.length} из {achievements.length}. За каждое достижение даётся{" "}
+            {ACHIEVEMENT_XP_REWARD} XP.
           </p>
         </div>
 
@@ -146,7 +154,7 @@ export default function AchievementsScreen() {
                     display: "grid",
                     gridTemplateColumns: "88px minmax(0, 1fr)",
                     gap: 16,
-                    alignItems: "center",
+                    alignItems: "start",
                     border: unlocked
                       ? "1px solid var(--success-border)"
                       : "1px solid var(--border-color)",
@@ -173,15 +181,14 @@ export default function AchievementsScreen() {
                     {presentation.icon}
                   </div>
 
-                  <div style={{ minWidth: 0, display: "grid", gap: 10 }}>
+                  <div style={{ minWidth: 0, display: "grid", gap: 10, alignSelf: "stretch" }}>
                     <div style={{ display: "grid", gap: 6 }}>
                       <div
                         style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
+                          display: "grid",
+                          gridTemplateColumns: "minmax(0, 1fr) auto",
+                          alignItems: "start",
                           gap: 12,
-                          flexWrap: "wrap",
                         }}
                       >
                         <div
@@ -190,6 +197,7 @@ export default function AchievementsScreen() {
                             fontWeight: 900,
                             lineHeight: 1.2,
                             color: "var(--text-color)",
+                            minWidth: 0,
                           }}
                         >
                           {presentation.title}
@@ -204,9 +212,10 @@ export default function AchievementsScreen() {
                             background: unlocked ? "var(--success-bg)" : "var(--soft-bg)",
                             color: unlocked ? "var(--success-color)" : "var(--muted-text-color)",
                             whiteSpace: "nowrap",
+                            alignSelf: "start",
                           }}
                         >
-                          {unlocked ? "Открыто" : "Закрыто"}
+                          {unlocked ? "Получено" : "Награда"}
                         </div>
                       </div>
 
@@ -223,11 +232,10 @@ export default function AchievementsScreen() {
 
                     <div
                       style={{
-                        display: "flex",
+                        display: "grid",
+                        gridTemplateColumns: "minmax(0, 1fr) auto",
                         alignItems: "center",
-                        justifyContent: "space-between",
                         gap: 12,
-                        flexWrap: "wrap",
                       }}
                     >
                       <div
@@ -235,25 +243,26 @@ export default function AchievementsScreen() {
                           fontSize: 13,
                           fontWeight: 700,
                           color: "var(--muted-text-color)",
+                          minWidth: 0,
                         }}
                       >
                         {presentation.spotlight ?? group.meta.title}
                       </div>
 
-                      {unlocked && (
-                        <div
-                          style={{
-                            padding: "8px 12px",
-                            borderRadius: 999,
-                            fontSize: 13,
-                            fontWeight: 800,
-                            background: "var(--primary-soft-2)",
-                            color: "var(--primary-strong)",
-                          }}
-                        >
-                          +{ACHIEVEMENT_XP_REWARD} XP
-                        </div>
-                      )}
+                      <div
+                        style={{
+                          padding: "8px 12px",
+                          borderRadius: 999,
+                          fontSize: 13,
+                          fontWeight: 800,
+                          background: unlocked ? "var(--success-bg)" : "var(--primary-soft-2)",
+                          color: unlocked ? "var(--success-color)" : "var(--primary-strong)",
+                        }}
+                      >
+                        {unlocked
+                          ? `Получено ${ACHIEVEMENT_XP_REWARD} XP`
+                          : `Награда: ${ACHIEVEMENT_XP_REWARD} XP`}
+                      </div>
                     </div>
                   </div>
                 </div>

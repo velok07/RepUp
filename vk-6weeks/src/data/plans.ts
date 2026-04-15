@@ -47,10 +47,10 @@ function generateRepPlan(base: number, weeklyGrowth: number): PlanMap {
         const offset = Math.round(workoutIndex * ((weeklyGrowth + 2) / 3));
 
         const values = [
-          levelBase + offset,
-          levelBase + offset,
           levelBase - 1 + offset,
           levelBase - 1 + offset,
+          levelBase + offset,
+          levelBase + offset,
           levelBase + 2 + offset,
         ].map((n) => Math.max(1, n));
 

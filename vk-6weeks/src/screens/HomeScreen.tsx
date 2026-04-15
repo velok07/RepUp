@@ -34,7 +34,11 @@ export default function HomeScreen() {
   const xpProgress = getXpProgress(xp);
 
   const startedPrograms = useMemo(
-    () => programs.filter((program) => progressMap[program.id]),
+    () =>
+      programs.filter((program) => {
+        const progress = progressMap[program.id];
+        return Boolean(progress && !progress.finished);
+      }),
     [progressMap]
   );
 
@@ -49,14 +53,7 @@ export default function HomeScreen() {
   const resolvedActiveProgramId =
     activeProgramId && progressMap[activeProgramId] ? activeProgramId : fallbackProgramId;
 
-  const sliderPrograms = useMemo(() => {
-    return startedPrograms.filter((program) => {
-      const progress = progressMap[program.id];
-      return Boolean(progress && !progress.finished);
-    });
-  }, [startedPrograms, progressMap]);
-
-  const effectivePrograms = sliderPrograms.length > 0 ? sliderPrograms : startedPrograms;
+  const effectivePrograms = startedPrograms;
 
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(
     resolvedActiveProgramId
@@ -225,7 +222,7 @@ export default function HomeScreen() {
               whiteSpace: "nowrap",
             }}
           >
-            До уровня: {xpProgress.max - xpProgress.current}
+            До уровня {level + 1}: {xpProgress.max - xpProgress.current} XP
           </div>
         </div>
 
@@ -338,7 +335,7 @@ export default function HomeScreen() {
               <div style={{ ...mutedTextStyle, fontSize: 14, marginBottom: 12 }}>
                 {currentProgress.finished
                   ? "Программа завершена."
-                  : `Сейчас: открыта неделя ${currentProgress.currentWeek}, день ${currentProgress.currentDay}.`}
+                  : `Сейчас открыта неделя ${currentProgress.currentWeek}, день ${currentProgress.currentDay}.`}
               </div>
 
               <div

@@ -1,0 +1,5 @@
+ALTER TABLE "User"
+ADD COLUMN "activeWorkoutSessions" JSONB;
+
+ALTER TABLE "ProgramProgress"
+ADD COLUMN "loadAdjustment" DOUBLE PRECISION NOT NULL DEFAULT 1;

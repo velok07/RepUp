@@ -1,4 +1,5 @@
 import type {
+  ActiveWorkoutSession,
   AppSettings,
   AppUser,
   ProgramType,
@@ -10,10 +11,12 @@ import { vkSend } from "../lib/vkBridge";
 import { useAppStore } from "../store/appStore";
 
 const API_URL = import.meta.env.VITE_API_URL;
+const LOCAL_STATE_KEY = "repup_persisted_state";
 
 export type PersistedAppState = {
   user?: AppUser;
   activeProgramId: ProgramType | null;
+  activeWorkoutSessions?: Partial<Record<ProgramType, ActiveWorkoutSession>>;
   progress: Partial<Record<ProgramType, UserProgramProgress>>;
   settings: AppSettings;
   userStats: UserStats;
@@ -41,6 +44,7 @@ const DEFAULT_STATE: PersistedAppState = {
     vkId: null,
   },
   activeProgramId: null,
+  activeWorkoutSessions: {},
   progress: {},
   settings: {
     restSeconds: 60,
@@ -100,6 +104,49 @@ function clearSessionIdentity() {
       id: null,
     },
   }));
+}
+
+function readLocalState(): PersistedAppState {
+  try {
+    const raw = localStorage.getItem(LOCAL_STATE_KEY);
+    if (!raw) return DEFAULT_STATE;
+
+    const parsed = JSON.parse(raw) as Partial<PersistedAppState>;
+    return {
+      ...DEFAULT_STATE,
+      ...parsed,
+      user: {
+        id: parsed.user?.id ?? null,
+        vkId: parsed.user?.vkId ?? null,
+        firstName: parsed.user?.firstName,
+        lastName: parsed.user?.lastName,
+        photoUrl: parsed.user?.photoUrl,
+      },
+      activeWorkoutSessions: parsed.activeWorkoutSessions ?? {},
+      progress: parsed.progress ?? {},
+      settings: {
+        ...DEFAULT_STATE.settings,
+        ...(parsed.settings ?? {}),
+      },
+      userStats: {
+        ...DEFAULT_STATE.userStats,
+        ...(parsed.userStats ?? {}),
+        rewardedAchievementIds: parsed.userStats?.rewardedAchievementIds ?? [],
+        pendingAchievementIds: parsed.userStats?.pendingAchievementIds ?? [],
+      },
+    };
+  } catch (error) {
+    console.warn("[RepUp] failed to read local persisted state", error);
+    return DEFAULT_STATE;
+  }
+}
+
+function writeLocalState(state: PersistedAppState) {
+  try {
+    localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.warn("[RepUp] failed to write local persisted state", error);
+  }
 }
 
 async function fetchWithTimeout(
@@ -342,8 +389,8 @@ export const appApi = {
     const res = await authorizedRequest(`${API_URL}/me/state`);
 
     if (!res) {
-      console.warn("[RepUp] no token, using default state");
-      return DEFAULT_STATE;
+      console.warn("[RepUp] no token, using local fallback state");
+      return readLocalState();
     }
 
     try {
@@ -351,30 +398,33 @@ export const appApi = {
 
       if (res.status === 404) {
         console.warn("[RepUp] no remote state yet");
-        return DEFAULT_STATE;
+        return readLocalState();
       }
 
       if (res.status === 401) {
-        console.warn("[RepUp] invalid session on load, fallback to default state");
-        return DEFAULT_STATE;
+        console.warn("[RepUp] invalid session on load, fallback to local state");
+        return readLocalState();
       }
 
       if (!res.ok) {
         const text = await res.text();
         console.error("[RepUp] load failed", text);
-        return DEFAULT_STATE;
+        return readLocalState();
       }
 
       const data = (await res.json()) as PersistedAppState;
+      writeLocalState(data);
       console.log("[RepUp] state loaded", data);
       return data;
     } catch (error) {
       console.error("[RepUp] load request failed", error);
-      return DEFAULT_STATE;
+      return readLocalState();
     }
   },
 
   async save(state: PersistedAppState): Promise<void> {
+    writeLocalState(state);
+
     const res = await authorizedRequest(
       `${API_URL}/me/state`,
       {

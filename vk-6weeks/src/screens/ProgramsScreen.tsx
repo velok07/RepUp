@@ -77,12 +77,8 @@ export default function ProgramsScreen() {
           border: "none",
         }}
       >
-        <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 8 }}>
-          Каталог программ
-        </div>
-        <h2 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>
-          Выбери направление
-        </h2>
+        <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 8 }}>Каталог программ</div>
+        <h2 style={{ margin: 0, fontSize: 28, lineHeight: 1.1 }}>Выбери направление</h2>
         <p style={{ marginTop: 12, marginBottom: 0, opacity: 0.95 }}>
           Подбери программу под свою цель и начни прокачку в RepUp.
         </p>
@@ -206,7 +202,8 @@ export default function ProgramsScreen() {
                       status={status}
                       statusBg={statusBg}
                       statusColor={statusColor}
-                      onOpen={() => navigate(`/program/${program.id}`)}
+                      onOpen={() => navigate(getPrimaryProgramRoute(program.id, progress?.finished ?? false, Boolean(progress)))}
+                      onDetails={() => navigate(`/program/${program.id}`)}
                     />
                   );
                 })}
@@ -225,12 +222,14 @@ function ProgramCard({
   statusBg,
   statusColor,
   onOpen,
+  onDetails,
 }: {
   program: Program;
   status: string;
   statusBg: string;
   statusColor: string;
   onOpen: () => void;
+  onDetails: () => void;
 }) {
   return (
     <div
@@ -283,9 +282,7 @@ function ProgramCard({
           </div>
         </div>
 
-        <h3 style={{ margin: 0, fontSize: 22, lineHeight: 1.15 }}>
-          {program.title}
-        </h3>
+        <h3 style={{ margin: 0, fontSize: 22, lineHeight: 1.15 }}>{program.title}</h3>
         <p style={{ color: "var(--muted-text-color)", marginTop: 8, marginBottom: 0 }}>
           {program.durationWeeks} нед. · {program.workoutsPerWeek} трен./нед.
         </p>
@@ -295,10 +292,22 @@ function ProgramCard({
         <button style={buttonStyle} onClick={onOpen}>
           Открыть
         </button>
-        <button style={secondaryButtonStyle} onClick={onOpen}>
+        <button style={secondaryButtonStyle} onClick={onDetails}>
           Подробнее
         </button>
       </div>
     </div>
   );
+}
+
+function getPrimaryProgramRoute(programId: ProgramType, isFinished: boolean, isStarted: boolean) {
+  if (isFinished) {
+    return `/plan/${programId}`;
+  }
+
+  if (isStarted) {
+    return `/workout/${programId}`;
+  }
+
+  return `/level-test/${programId}`;
 }

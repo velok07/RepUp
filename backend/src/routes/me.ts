@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma";
 import { authMiddleware } from "../middleware/auth";
 
@@ -8,6 +9,7 @@ type SaveStateBody = {
     lastName?: string;
   };
   activeProgramId: string | null;
+  activeWorkoutSessions?: Record<string, unknown>;
   progress: Record<string, unknown>;
   settings: {
     restSeconds: number;
@@ -36,6 +38,7 @@ type IncomingWorkoutLog = {
 type IncomingProgressItem = {
   programId: string;
   level: number;
+  loadAdjustment?: number;
   startedAt: string;
   currentWeek: number;
   currentDay: number;
@@ -48,6 +51,7 @@ type IncomingProgressItem = {
 type DbProgressItem = {
   programId: string;
   level: number;
+  loadAdjustment: number;
   startedAt: Date;
   currentWeek: number;
   currentDay: number;
@@ -119,6 +123,7 @@ router.get("/state", authMiddleware, async (req, res) => {
         {
           programId: item.programId,
           level: item.level,
+          loadAdjustment: item.loadAdjustment ?? 1,
           startedAt: item.startedAt.toISOString(),
           currentWeek: item.currentWeek,
           currentDay: item.currentDay,
@@ -154,6 +159,12 @@ router.get("/state", authMiddleware, async (req, res) => {
         lastName: user.lastName,
       },
       activeProgramId: user.activeProgramId,
+      activeWorkoutSessions:
+        user.activeWorkoutSessions &&
+        typeof user.activeWorkoutSessions === "object" &&
+        !Array.isArray(user.activeWorkoutSessions)
+          ? user.activeWorkoutSessions
+          : {},
       progress,
       settings: {
         restSeconds: user.settings.restSeconds,
@@ -187,7 +198,14 @@ router.put("/state", authMiddleware, async (req, res) => {
       return res.status(401).json({ message: "Invalid session" });
     }
 
-    const { user, activeProgramId, progress, settings, userStats } =
+    const {
+      user,
+      activeProgramId,
+      activeWorkoutSessions,
+      progress,
+      settings,
+      userStats,
+    } =
       req.body as SaveStateBody;
 
     const progressItems = Object.values(progress ?? {}) as IncomingProgressItem[];
@@ -200,6 +218,7 @@ router.put("/state", authMiddleware, async (req, res) => {
         where: { id: userId },
         data: {
           activeProgramId,
+          activeWorkoutSessions: (activeWorkoutSessions ?? {}) as Prisma.InputJsonValue,
           firstName: user?.firstName,
           lastName: user?.lastName,
         },
@@ -273,6 +292,7 @@ router.put("/state", authMiddleware, async (req, res) => {
           },
           update: {
             level: progressItem.level,
+            loadAdjustment: progressItem.loadAdjustment ?? 1,
             startedAt: new Date(progressItem.startedAt),
             currentWeek: progressItem.currentWeek,
             currentDay: progressItem.currentDay,
@@ -284,6 +304,7 @@ router.put("/state", authMiddleware, async (req, res) => {
             userId,
             programId: progressItem.programId,
             level: progressItem.level,
+            loadAdjustment: progressItem.loadAdjustment ?? 1,
             startedAt: new Date(progressItem.startedAt),
             currentWeek: progressItem.currentWeek,
             currentDay: progressItem.currentDay,
@@ -342,6 +363,14 @@ router.post("/reset", authMiddleware, async (req, res) => {
     }
 
     await prisma.$transaction(async (tx) => {
+      const currentStats = await tx.userStats.findUnique({
+        where: { userId },
+        select: {
+          xp: true,
+          rewardedAchievementIds: true,
+        },
+      });
+
       await tx.programProgress.deleteMany({
         where: { userId },
       });
@@ -354,20 +383,25 @@ router.post("/reset", authMiddleware, async (req, res) => {
         where: { id: userId },
         data: {
           activeProgramId: null,
+          activeWorkoutSessions: {},
         },
       });
 
       await tx.userStats.upsert({
         where: { userId },
         update: {
-          xp: 0,
-          rewardedAchievementIds: [],
+          xp: currentStats?.xp ?? 0,
+          rewardedAchievementIds: Array.isArray(currentStats?.rewardedAchievementIds)
+            ? currentStats.rewardedAchievementIds
+            : [],
           pendingAchievementIds: [],
         },
         create: {
           userId,
-          xp: 0,
-          rewardedAchievementIds: [],
+          xp: currentStats?.xp ?? 0,
+          rewardedAchievementIds: Array.isArray(currentStats?.rewardedAchievementIds)
+            ? currentStats.rewardedAchievementIds
+            : [],
           pendingAchievementIds: [],
         },
       });

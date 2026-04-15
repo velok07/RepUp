@@ -93,7 +93,11 @@ export function isExclusiveAchievementLocked(
   if (!achievement.exclusiveDate) return false;
   if (unlockedSet.has(achievement.id)) return false;
 
-  const unlocksAt = new Date(now.getFullYear(), achievement.exclusiveDate.month - 1, achievement.exclusiveDate.day);
+  const unlocksAt = new Date(
+    now.getFullYear(),
+    achievement.exclusiveDate.month - 1,
+    achievement.exclusiveDate.day
+  );
   return startOfDay(now) < startOfDay(unlocksAt);
 }
 

@@ -22,6 +22,7 @@ export default function PlanScreen() {
   const navigate = useNavigate();
   const setActiveProgram = useAppStore((s) => s.setActiveProgram);
   const setProgramLoadAdjustment = useAppStore((s) => s.setProgramLoadAdjustment);
+  const activeWorkoutSessions = useAppStore((s) => s.activeWorkoutSessions);
 
   const program = programs.find((item) => item.id === id);
   const progress = useAppStore((s) =>
@@ -39,9 +40,16 @@ export default function PlanScreen() {
 
   if (!progress || !id || !program) {
     return (
-      <div style={cardStyle}>
-        <h2 style={pageTitleStyle}>План</h2>
-        <p style={mutedTextStyle}>Сначала начни программу и пройди тест.</p>
+      <div style={{ display: "grid", gap: 16 }}>
+        <div style={cardStyle}>
+          <h2 style={pageTitleStyle}>План</h2>
+          <p style={mutedTextStyle}>Сначала начни программу и пройди стартовый тест.</p>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
+            <button style={buttonStyle} onClick={() => navigate("/programs")}>
+              Назад к программам
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -52,6 +60,12 @@ export default function PlanScreen() {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      <div style={{ display: "flex", justifyContent: "flex-start" }}>
+        <button style={secondaryButtonStyle} onClick={() => navigate(`/program/${id}`)}>
+          Назад
+        </button>
+      </div>
+
       <div
         style={{
           ...cardStyle,
@@ -167,6 +181,9 @@ export default function PlanScreen() {
                 const key = makeWorkoutKey(dayWorkout.week, dayWorkout.day);
                 const isCompleted = completedSet.has(key);
                 const isCurrent = !progress.finished && key === currentKey;
+                const activeSession = activeWorkoutSessions[program.id];
+                const isStartedSession =
+                  activeSession?.week === dayWorkout.week && activeSession?.day === dayWorkout.day;
                 const log = progress.workoutLogs.find((item) => item.key === key);
                 const displayedTargets =
                   log?.planned ?? dayWorkout.steps.map((step) => step.target);
@@ -183,6 +200,12 @@ export default function PlanScreen() {
                   border = "var(--success-border)";
                   badgeBg = "var(--success-bg)";
                   badgeColor = "var(--success-color)";
+                } else if (isStartedSession) {
+                  status = "Начата";
+                  bg = "var(--primary-soft-2)";
+                  border = "#93c5fd";
+                  badgeBg = "var(--primary-soft)";
+                  badgeColor = "var(--primary-strong)";
                 } else if (isCurrent) {
                   status = "Текущая";
                   bg = "var(--primary-soft-2)";
@@ -273,9 +296,9 @@ export default function PlanScreen() {
                       </div>
                     )}
 
-                    {(isCurrent || isCompleted) && (
+                    {(isCurrent || isCompleted || isStartedSession) && (
                       <div style={{ marginTop: 14, display: "flex", gap: 12, flexWrap: "wrap" }}>
-                        {isCurrent && (
+                        {(isCurrent || isStartedSession) && (
                           <button
                             style={buttonStyle}
                             onClick={() => {
@@ -283,7 +306,9 @@ export default function PlanScreen() {
                               navigate(`/workout/${id}`);
                             }}
                           >
-                            Начать эту тренировку
+                            {isStartedSession
+                              ? "Продолжить эту тренировку"
+                              : "Начать эту тренировку"}
                           </button>
                         )}
 

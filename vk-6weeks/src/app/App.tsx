@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Icon28GraphOutline,
@@ -44,6 +44,10 @@ export default function App() {
   useEffect(() => {
     document.body.classList.toggle("dark", theme === "dark");
   }, [theme]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location.pathname, location.search]);
 
   if (!hydrated) {
     return (
@@ -121,7 +125,7 @@ export default function App() {
                       textTransform: "uppercase",
                     }}
                   >
-                    Fitness Progress
+                    Фитнес-прогресс
                   </div>
                   <div
                     style={{
@@ -228,7 +232,7 @@ export default function App() {
                     flexShrink: 0,
                   }}
                 >
-                  ↩
+                  ←
                 </span>
 
                 <span style={{ textAlign: "left" }}>
@@ -241,7 +245,7 @@ export default function App() {
                 </span>
               </span>
 
-              <span style={{ fontSize: 20, fontWeight: 800, lineHeight: 1 }}>→</span>
+              <span style={{ fontSize: 20, fontWeight: 800, lineHeight: 1 }}>←</span>
             </button>
           )}
 
@@ -273,7 +277,7 @@ export default function App() {
           >
             <NavItem
               label="Главная"
-              active={location.pathname === "/"}
+              active={location.pathname === "/" || location.pathname.startsWith("/achievements")}
               onClick={() => navigate("/")}
             >
               <Icon28HomeOutline />
@@ -282,7 +286,10 @@ export default function App() {
               label="Программы"
               active={
                 location.pathname.startsWith("/program") ||
-                location.pathname.startsWith("/level-test")
+                location.pathname.startsWith("/level-test") ||
+                location.pathname.startsWith("/plan") ||
+                location.pathname.startsWith("/workout") ||
+                location.pathname.startsWith("/result")
               }
               onClick={() => navigate("/programs")}
             >
@@ -315,7 +322,7 @@ function NavItem({
   active,
   onClick,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   label: string;
   active: boolean;
   onClick: () => void;

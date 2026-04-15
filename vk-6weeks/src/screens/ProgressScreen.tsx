@@ -60,13 +60,14 @@ export default function ProgressScreen() {
     }
   }, [activeProgram, activeProgramId, setActiveProgram]);
 
-  if (startedPrograms.length === 0) {
+  if (startedPrograms.length === 0 || allLogs.length === 0) {
     return (
       <div style={{ display: "grid", gap: 16 }}>
         <div style={cardStyle}>
           <h1 style={pageTitleStyle}>Прогресс</h1>
           <p style={mutedTextStyle}>
-            Пока нет истории тренировок. Начни программу, чтобы отслеживать прогресс.
+            Пока нет истории тренировок. Начни программу и заверши хотя бы одну тренировку,
+            чтобы увидеть графики и журнал попыток.
           </p>
           <div style={{ marginTop: 16 }}>
             <button style={buttonStyle} onClick={() => navigate("/programs")}>
@@ -100,7 +101,7 @@ export default function ProgressScreen() {
         <div style={{ marginBottom: 16 }}>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Активность за месяц</h2>
           <p style={{ ...mutedTextStyle, marginTop: 8 }}>
-            Сколько тренировок ты выполнил за последние 4 недели по всем программам вместе.
+            Сколько тренировок ты выполнил за последние 7 дней по всем программам вместе.
           </p>
         </div>
 
@@ -198,7 +199,8 @@ export default function ProgressScreen() {
               left: `calc(${sliderWidthPercent * activeIndex}% + 2px)`,
               width: `calc(${sliderWidthPercent}% - 4px)`,
               borderRadius: 999,
-              background: "linear-gradient(90deg, var(--primary-color) 0%, var(--primary-strong) 100%)",
+              background:
+                "linear-gradient(90deg, var(--primary-color) 0%, var(--primary-strong) 100%)",
               transition: "left 0.2s ease, width 0.2s ease",
             }}
           />
@@ -233,7 +235,7 @@ export default function ProgressScreen() {
         </div>
 
         {logs.length === 0 ? (
-          <div style={mutedTextStyle}>Для этой программы пока нет тренировок.</div>
+          <div style={mutedTextStyle}>Для этой программы пока нет завершённых тренировок.</div>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
             {logs.map((log) => (
@@ -291,10 +293,10 @@ function HistoryCard({
           gap: 10,
         }}
       >
-        <MetricTile label="План" value={splitMetric(log.planned)} />
+        <MetricTile label="План" value={joinMetric(log.planned)} />
         <MetricTile
           label="Факт"
-          value={splitMetric(log.actual)}
+          value={joinMetric(log.actual)}
           tone={log.actualTotal < log.plannedTotal ? "danger" : "default"}
         />
         <MetricTile label="Итог" value={`${log.actualTotal}/${log.plannedTotal}`} />
@@ -332,7 +334,8 @@ function MetricTile({
           lineHeight: 1.3,
           fontWeight: 700,
           color: tone === "danger" ? "#d14343" : "var(--text-color)",
-          whiteSpace: "pre-line",
+          whiteSpace: "normal",
+          overflowWrap: "anywhere",
         }}
       >
         {value}
@@ -494,10 +497,8 @@ function ArrowRightIcon() {
   );
 }
 
-function splitMetric(values: number[]) {
-  return values.length <= 4
-    ? values.join(" / ")
-    : `${values.slice(0, 4).join(" / ")}\n/ ${values.slice(4).join(" / ")}`;
+function joinMetric(values: number[]) {
+  return values.join(" / ");
 }
 
 function buildMonthlyActivity(logs: WorkoutLogItem[]) {

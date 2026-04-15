@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAppStore } from "../store/appStore";
-import { getWorkoutByProgress } from "../utils/plan";
+import { getAdjustedPlanByLevel, getWorkoutByProgress } from "../utils/plan";
 import {
   calculateAchievementProgress,
   ACHIEVEMENT_XP_REWARD,
@@ -22,6 +22,7 @@ import {
 export default function WorkoutScreen() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const completeWorkout = useAppStore((s) => s.completeWorkout);
   const failWorkout = useAppStore((s) => s.failWorkout);
@@ -44,6 +45,13 @@ export default function WorkoutScreen() {
   const [currentStep, setCurrentStep] = useState(sessionForProgram?.currentStep ?? 0);
   const [started, setStarted] = useState(Boolean(sessionForProgram));
   const [finished, setFinished] = useState(false);
+  const [stepTimerRunning, setStepTimerRunning] = useState(
+    Boolean(sessionForProgram?.stepTimerRunning)
+  );
+  const [stepTimeLeft, setStepTimeLeft] = useState(sessionForProgram?.stepTimeLeft ?? 0);
+  const [stepTimerEndsAt, setStepTimerEndsAt] = useState<string | null>(
+    sessionForProgram?.stepTimerEndsAt ?? null
+  );
   const [resting, setResting] = useState(Boolean(sessionForProgram?.resting));
   const [restLeft, setRestLeft] = useState(sessionForProgram?.restLeft ?? 0);
   const [restEndsAt, setRestEndsAt] = useState<string | null>(
@@ -55,6 +63,7 @@ export default function WorkoutScreen() {
   const [actuals, setActuals] = useState<number[]>(sessionForProgram?.actuals ?? []);
   const [showAchievementToast, setShowAchievementToast] = useState(false);
   const [toastAchievementIds, setToastAchievementIds] = useState<string[]>([]);
+  const [showExitDialog, setShowExitDialog] = useState(false);
   const [completedWorkoutInfo, setCompletedWorkoutInfo] = useState<{
     week: number;
     day: number;
@@ -65,8 +74,29 @@ export default function WorkoutScreen() {
     unlockedCount: number;
   } | null>(null);
 
+  const requestedWeek = Number(searchParams.get("week"));
+  const requestedDay = Number(searchParams.get("day"));
+  const isRepeatMode = searchParams.get("repeat") === "1";
+
   const workout = useMemo(() => {
     if (!progress || !id) return null;
+
+    if (
+      isRepeatMode &&
+      Number.isFinite(requestedWeek) &&
+      requestedWeek > 0 &&
+      Number.isFinite(requestedDay) &&
+      requestedDay > 0
+    ) {
+      return (
+        getAdjustedPlanByLevel(
+          id as ProgramType,
+          progress.level,
+          progress.loadAdjustment ?? 1
+        ).find((item) => item.week === requestedWeek && item.day === requestedDay) ?? null
+      );
+    }
+
     return getWorkoutByProgress(
       id as ProgramType,
       progress.level,
@@ -74,7 +104,7 @@ export default function WorkoutScreen() {
       progress.currentDay,
       progress.loadAdjustment ?? 1
     );
-  }, [progress, id]);
+  }, [id, isRepeatMode, progress, requestedDay, requestedWeek]);
 
   const unlockedAchievementItems = useMemo(() => {
     const pendingSet = new Set(toastAchievementIds);
@@ -90,6 +120,7 @@ export default function WorkoutScreen() {
   const plannedTotal = plannedValues.reduce((sum, value) => sum + value, 0);
   const actualTotalSoFar = actuals.reduce((sum, value) => sum + value, 0);
   const nextStep = workout?.steps[currentStep + 1] ?? null;
+  const isTimedWorkout = program?.unit === "seconds";
   const previewActualValue = editActual ? Number(actualValue) : null;
   const currentStepPreviewValue =
     previewActualValue !== null && !Number.isNaN(previewActualValue) && previewActualValue >= 0
@@ -106,6 +137,12 @@ export default function WorkoutScreen() {
     setCurrentStep((current) => current + 1);
     setActualValue("");
     setEditActual(false);
+  };
+
+  const resetStepTimer = () => {
+    setStepTimerRunning(false);
+    setStepTimeLeft(0);
+    setStepTimerEndsAt(null);
   };
 
   useEffect(() => {
@@ -169,6 +206,9 @@ export default function WorkoutScreen() {
       title: workout.title,
       currentStep,
       actuals,
+      stepTimerRunning,
+      stepTimeLeft,
+      stepTimerEndsAt,
       resting,
       restLeft,
       restEndsAt,
@@ -182,6 +222,9 @@ export default function WorkoutScreen() {
     editActual,
     finished,
     id,
+    stepTimeLeft,
+    stepTimerEndsAt,
+    stepTimerRunning,
     restEndsAt,
     restLeft,
     resting,
@@ -198,7 +241,7 @@ export default function WorkoutScreen() {
     return <div style={cardStyle}>Сначала начни программу</div>;
   }
 
-  if (progress.finished) {
+  if (progress.finished && !isRepeatMode && !sessionForProgram) {
     return (
       <div style={cardStyle}>
         <h2 style={pageTitleStyle}>Программа завершена</h2>
@@ -218,19 +261,16 @@ export default function WorkoutScreen() {
   }
 
   const currentTarget = workout.steps[currentStep].target;
-  const unitLabel = program.unit === "seconds" ? "секунд" : "повторений";
+  const unitLabel = program.unit === "seconds" ? "секунд" : getRepetitionWord(currentTarget);
   const shortUnitLabel = program.unit === "seconds" ? "сек" : "повт";
 
   const finishOrContinue = (nextActuals: number[]) => {
     const isLast = currentStep >= workout.steps.length - 1;
 
     if (isLast) {
-      const passed = workout.steps.every((step, idx) => {
-        return (nextActuals[idx] ?? 0) >= step.target;
-      });
-
       const finalPlannedTotal = plannedValues.reduce((sum, value) => sum + value, 0);
       const finalActualTotal = nextActuals.reduce((sum, value) => sum + value, 0);
+      const passed = finalActualTotal >= finalPlannedTotal;
 
       if (passed) {
         completeWorkout(id as ProgramType, {
@@ -238,14 +278,14 @@ export default function WorkoutScreen() {
           day: workout.day,
           planned: plannedValues,
           actual: nextActuals,
-        });
+        }, { preserveProgress: isRepeatMode });
       } else {
         failWorkout(id as ProgramType, {
           week: workout.week,
           day: workout.day,
           planned: plannedValues,
           actual: nextActuals,
-        });
+        }, { preserveProgress: isRepeatMode });
       }
 
       const nextProgress = useAppStore.getState().progress;
@@ -271,6 +311,7 @@ export default function WorkoutScreen() {
       });
 
       clearActiveWorkoutSession(id as ProgramType);
+      resetStepTimer();
       setSuccess(passed);
       setFinished(true);
       return;
@@ -280,12 +321,40 @@ export default function WorkoutScreen() {
     setRestLeft(settings.restSeconds);
     setRestEndsAt(nextRestEndsAt);
     setResting(true);
+    resetStepTimer();
   };
+
+  useEffect(() => {
+    if (!stepTimerRunning || !stepTimerEndsAt) return;
+
+    const updateStepTimerState = () => {
+      const nextStepTimeLeft = Math.max(
+        0,
+        Math.ceil((new Date(stepTimerEndsAt).getTime() - Date.now()) / 1000)
+      );
+
+      if (nextStepTimeLeft <= 0) {
+        const nextActuals = [...actuals, currentTarget];
+        setActuals(nextActuals);
+        resetStepTimer();
+        finishOrContinue(nextActuals);
+        return;
+      }
+
+      setStepTimeLeft(nextStepTimeLeft);
+    };
+
+    updateStepTimerState();
+
+    const timer = window.setInterval(updateStepTimerState, 250);
+    return () => clearInterval(timer);
+  }, [actuals, currentTarget, finishOrContinue, stepTimerEndsAt, stepTimerRunning]);
 
   const onStart = () => {
     setStarted(true);
     setCurrentStep(0);
     setFinished(false);
+    resetStepTimer();
     setResting(false);
     setActuals([]);
     setRestEndsAt(null);
@@ -297,6 +366,16 @@ export default function WorkoutScreen() {
   };
 
   const onDoneDefault = () => {
+    if (isTimedWorkout) {
+      const nextStepTimerEndsAt = new Date(Date.now() + currentTarget * 1000).toISOString();
+      setStepTimerRunning(true);
+      setStepTimeLeft(currentTarget);
+      setStepTimerEndsAt(nextStepTimerEndsAt);
+      setEditActual(false);
+      setActualValue("");
+      return;
+    }
+
     if (!settings.autoFillTargetOnComplete) {
       setEditActual(true);
       setActualValue(String(currentTarget));
@@ -313,7 +392,16 @@ export default function WorkoutScreen() {
 
     const nextActuals = [...actuals, parsedActualValue];
     setActuals(nextActuals);
+    resetStepTimer();
     finishOrContinue(nextActuals);
+  };
+
+  const stopTimedAttemptEarly = () => {
+    const elapsed = Math.max(0, currentTarget - stepTimeLeft);
+
+    resetStepTimer();
+    setEditActual(true);
+    setActualValue(String(elapsed));
   };
 
   const skipRest = () => {
@@ -411,11 +499,7 @@ export default function WorkoutScreen() {
               <div style={{ fontSize: 12, color: "var(--muted-text-color)", marginBottom: 4 }}>
                 {step.index}
               </div>
-              <div style={{ fontWeight: 900, fontSize: 18 }}>
-                {index === currentStep && started && !finished && editActual
-                  ? currentStepPreviewValue
-                  : step.target}
-              </div>
+              <div style={{ fontWeight: 900, fontSize: 18 }}>{step.target}</div>
               <div
                 style={{
                   fontSize: 12,
@@ -453,13 +537,8 @@ export default function WorkoutScreen() {
 
   const handleExitAttempt = () => {
     if (started && !finished) {
-      const confirmed = window.confirm(
-        "Тренировка еще не завершена. Выйти без сохранения текущего подхода?"
-      );
-
-      if (!confirmed) return;
-
-      clearActiveWorkoutSession(id as ProgramType);
+      setShowExitDialog(true);
+      return;
     }
 
     leaveScreen(`/plan/${id}`);
@@ -575,7 +654,7 @@ export default function WorkoutScreen() {
 
           {success ? (
             <p style={{ opacity: 0.95 }}>
-              Отлично. Следующий раз откроется следующая тренировка.
+              Отлично! Следующая тренировка уже доступна.
             </p>
           ) : (
             <p style={{ opacity: 0.95 }}>
@@ -648,6 +727,26 @@ export default function WorkoutScreen() {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      {showExitDialog && (
+        <ConfirmDialog
+          title="Тренировка ещё не завершена"
+          description="Сохранить текущие подходы перед выходом?"
+          primaryLabel="Сохранить и выйти"
+          secondaryLabel="Выйти без сохранения"
+          cancelLabel="Отмена"
+          onPrimary={() => {
+            setShowExitDialog(false);
+            leaveScreen(`/plan/${id}`);
+          }}
+          onSecondary={() => {
+            clearActiveWorkoutSession(id as ProgramType);
+            setShowExitDialog(false);
+            leaveScreen(`/plan/${id}`);
+          }}
+          onCancel={() => setShowExitDialog(false)}
+        />
+      )}
+
       <div style={cardStyle}>
         <div
           style={{
@@ -738,7 +837,11 @@ export default function WorkoutScreen() {
           }}
         >
           <MiniWorkoutStat label="Сделано подходов" value={String(completedSets)} helper={`Осталось ${remainingSets}`} />
-          <MiniWorkoutStat label="План на тренировку" value={`${plannedTotal} ${shortUnitLabel}`} helper={`${workout.steps.length} подходов`} />
+          <MiniWorkoutStat
+            label="План на тренировку"
+            value={`${plannedTotal} ${shortUnitLabel}`}
+            helper={`${workout.steps.length} ${pluralizeSets(workout.steps.length)}`}
+          />
           <div style={{ gridColumn: "1 / -1" }}>
             <MiniWorkoutStat label="Факт сейчас" value={`${actualTotalSoFar} ${shortUnitLabel}`} helper="Начни тренировку" />
           </div>
@@ -761,7 +864,7 @@ export default function WorkoutScreen() {
             <div>
               <h3 style={{ margin: "0 0 10px" }}>Готов к тренировке?</h3>
               <p style={{ ...mutedTextStyle, margin: 0 }}>
-                Тебя ждут {workout.steps.length} подходов на {plannedTotal} {shortUnitLabel}
+                Тебя ждут {workout.steps.length} {pluralizeSets(workout.steps.length)} на {plannedTotal} {shortUnitLabel}
               </p>
             </div>
           </div>
@@ -798,7 +901,7 @@ export default function WorkoutScreen() {
                 fontWeight: 700,
               }}
             >
-              Подход {workout.steps[currentStep].index} из {workout.steps.length}
+              Подход {getDisplayedStepIndex(workout.steps[currentStep].index, resting, workout.steps.length)} из {workout.steps.length}
             </div>
 
             <div
@@ -809,12 +912,29 @@ export default function WorkoutScreen() {
                 color: "var(--text-color)",
               }}
             >
-              {editActual ? currentStepPreviewValue : currentTarget}
+              {stepTimerRunning
+                ? stepTimeLeft
+                : editActual
+                ? currentStepPreviewValue
+                : currentTarget}
             </div>
 
-            <div style={{ ...mutedTextStyle, fontSize: 15 }}>{unitLabel}</div>
+            <div style={{ ...mutedTextStyle, fontSize: 15 }}>
+              {stepTimerRunning ? "секунд осталось" : unitLabel}
+            </div>
 
-            {editActual ? (
+            {stepTimerRunning ? (
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: "var(--primary-strong)",
+                  minHeight: 21,
+                }}
+              >
+                Обратный отсчёт уже идёт
+              </div>
+            ) : editActual ? (
               <div
                 style={{
                   fontSize: 14,
@@ -840,17 +960,43 @@ export default function WorkoutScreen() {
                 alignItems: "stretch",
               }}
             >
-              <button style={{ ...buttonStyle, width: "100%" }} onClick={onDoneDefault}>
-                Подход выполнен
+              <button
+                style={{
+                  ...buttonStyle,
+                  width: "100%",
+                  opacity: stepTimerRunning ? 0.75 : 1,
+                  cursor: stepTimerRunning ? "default" : "pointer",
+                }}
+                onClick={onDoneDefault}
+                disabled={stepTimerRunning}
+              >
+                {isTimedWorkout
+                  ? stepTimerRunning
+                    ? "Таймер запущен"
+                    : "Запустить таймер"
+                  : "Подход выполнен"}
               </button>
 
               <button
                 onClick={() => {
+                  if (isTimedWorkout && stepTimerRunning) {
+                    stopTimedAttemptEarly();
+                    return;
+                  }
+
                   setEditActual(true);
                   setActualValue(String(currentTarget));
                 }}
-                aria-label="Изменить фактическое количество"
-                title="Изменить фактическое количество"
+                aria-label={
+                  isTimedWorkout && stepTimerRunning
+                    ? "Остановить таймер и ввести факт"
+                    : "Изменить фактическое количество"
+                }
+                title={
+                  isTimedWorkout && stepTimerRunning
+                    ? "Остановить таймер и ввести факт"
+                    : "Изменить фактическое количество"
+                }
                 style={{
                   width: "100%",
                   height: 56,
@@ -864,20 +1010,36 @@ export default function WorkoutScreen() {
                   boxShadow: "0 10px 24px rgba(124, 92, 255, 0.18)",
                 }}
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  width="24"
-                  height="24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
-                </svg>
+                {isTimedWorkout && stepTimerRunning ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="24"
+                    height="24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <rect x="6" y="6" width="12" height="12" rx="2" />
+                  </svg>
+                ) : (
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="24"
+                    height="24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+                  </svg>
+                )}
               </button>
             </div>
           )}
@@ -1032,7 +1194,106 @@ function ResultStat({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ConfirmDialog({
+  title,
+  description,
+  primaryLabel,
+  secondaryLabel,
+  cancelLabel,
+  onPrimary,
+  onSecondary,
+  onCancel,
+}: {
+  title: string;
+  description: string;
+  primaryLabel: string;
+  secondaryLabel: string;
+  cancelLabel: string;
+  onPrimary: () => void;
+  onSecondary: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 40,
+        display: "grid",
+        placeItems: "center",
+        background: "rgba(2, 6, 23, 0.5)",
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          ...cardStyle,
+          width: "min(100%, 420px)",
+          display: "grid",
+          gap: 14,
+          boxShadow: "0 24px 64px rgba(15, 23, 42, 0.28)",
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: "var(--text-color)", marginBottom: 8 }}>
+            {title}
+          </div>
+          <div style={mutedTextStyle}>{description}</div>
+        </div>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          <button style={buttonStyle} onClick={onPrimary}>
+            {primaryLabel}
+          </button>
+          <button style={secondaryButtonStyle} onClick={onSecondary}>
+            {secondaryLabel}
+          </button>
+          <button
+            style={{
+              border: "none",
+              background: "transparent",
+              color: "var(--muted-text-color)",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
+              padding: "8px 12px",
+            }}
+            onClick={onCancel}
+          >
+            {cancelLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function currentTargetValue(workout: NonNullable<ReturnType<typeof getWorkoutByProgress>> | null, currentStep: number) {
   return workout?.steps[currentStep]?.target ?? 0;
+}
+
+function getDisplayedStepIndex(currentIndex: number, resting: boolean, totalSteps: number) {
+  if (!resting) return currentIndex;
+  return Math.min(currentIndex + 1, totalSteps);
+}
+
+function pluralizeSets(count: number) {
+  const lastTwo = count % 100;
+  const last = count % 10;
+
+  if (lastTwo >= 11 && lastTwo <= 14) return "подходов";
+  if (last === 1) return "подход";
+  if (last >= 2 && last <= 4) return "подхода";
+  return "подходов";
+}
+
+function getRepetitionWord(count: number) {
+  const lastTwo = count % 100;
+  const last = count % 10;
+
+  if (lastTwo >= 11 && lastTwo <= 14) return "повторений";
+  if (last === 1) return "повторение";
+  if (last >= 2 && last <= 4) return "повторения";
+  return "повторений";
 }

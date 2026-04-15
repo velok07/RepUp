@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "../store/appStore";
 import { clampNumber, parsePositiveInt, sanitizeDigitsInput } from "../utils/numeric";
 import {
@@ -9,6 +9,9 @@ import {
   pageTitleStyle,
   secondaryButtonStyle,
 } from "../components/ui";
+
+const REST_SAVE_DELAY_MS = 450;
+const REST_MESSAGE_HIDE_DELAY_MS = 1500;
 
 export default function ProfileScreen() {
   const resetAll = useAppStore((s) => s.resetAll);
@@ -21,29 +24,85 @@ export default function ProfileScreen() {
   const [restInput, setRestInput] = useState(String(settings.restSeconds));
   const [saveMessage, setSaveMessage] = useState("");
 
-  const hasAnyProgress = useMemo(() => {
-    return Object.values(progress).some(Boolean);
-  }, [progress]);
+  const restSaveTimeoutRef = useRef<number | null>(null);
+  const saveMessageTimeoutRef = useRef<number | null>(null);
+
+  const hasAnyProgress = useMemo(() => Object.values(progress).some(Boolean), [progress]);
 
   useEffect(() => {
     setRestInput(String(settings.restSeconds));
   }, [settings.restSeconds]);
 
+  useEffect(() => {
+    return () => {
+      if (restSaveTimeoutRef.current !== null) {
+        window.clearTimeout(restSaveTimeoutRef.current);
+      }
+
+      if (saveMessageTimeoutRef.current !== null) {
+        window.clearTimeout(saveMessageTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const parsedRestInput = parsePositiveInt(restInput);
   const hasValidRestInput =
     restInput.length > 0 && parsedRestInput !== null && parsedRestInput >= 0;
+
+  const showSavedMessage = () => {
+    setSaveMessage("Сохранено");
+
+    if (saveMessageTimeoutRef.current !== null) {
+      window.clearTimeout(saveMessageTimeoutRef.current);
+    }
+
+    saveMessageTimeoutRef.current = window.setTimeout(() => {
+      setSaveMessage((current) => (current === "Сохранено" ? "" : current));
+      saveMessageTimeoutRef.current = null;
+    }, REST_MESSAGE_HIDE_DELAY_MS);
+  };
 
   const persistRestSeconds = (nextValue: string) => {
     const parsed = parsePositiveInt(nextValue);
     const normalized = clampNumber(parsed ?? 0, 0, 600);
 
-    updateSettings({ restSeconds: normalized });
     setRestInput(String(normalized));
-    setSaveMessage("Сохранено");
 
-    window.setTimeout(() => {
-      setSaveMessage((current) => (current === "Сохранено" ? "" : current));
-    }, 1500);
+    if (normalized === settings.restSeconds) {
+      return;
+    }
+
+    updateSettings({ restSeconds: normalized });
+    showSavedMessage();
+  };
+
+  const scheduleRestSecondsSave = (nextValue: string) => {
+    if (restSaveTimeoutRef.current !== null) {
+      window.clearTimeout(restSaveTimeoutRef.current);
+    }
+
+    restSaveTimeoutRef.current = window.setTimeout(() => {
+      persistRestSeconds(nextValue);
+      restSaveTimeoutRef.current = null;
+    }, REST_SAVE_DELAY_MS);
+  };
+
+  const flushRestSecondsSave = () => {
+    if (restSaveTimeoutRef.current !== null) {
+      window.clearTimeout(restSaveTimeoutRef.current);
+      restSaveTimeoutRef.current = null;
+    }
+
+    persistRestSeconds(restInput);
+  };
+
+  const adjustRestInput = (delta: number) => {
+    const baseValue = parsedRestInput ?? settings.restSeconds;
+    const nextValue = String(clampNumber(baseValue + delta, 0, 600));
+
+    setRestInput(nextValue);
+    setSaveMessage("");
+    scheduleRestSecondsSave(nextValue);
   };
 
   const displayName =
@@ -108,7 +167,7 @@ export default function ProfileScreen() {
           </div>
         )}
 
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, overflow: "hidden" }}>
           <div style={{ fontSize: 13, color: "var(--muted-text-color)", marginBottom: 6 }}>
             Профиль VK
           </div>
@@ -119,6 +178,8 @@ export default function ProfileScreen() {
               lineHeight: 1.15,
               color: "var(--text-color)",
               marginBottom: 6,
+              overflowWrap: "anywhere",
+              wordBreak: "break-word",
             }}
           >
             {displayName}
@@ -198,11 +259,17 @@ export default function ProfileScreen() {
         <p style={mutedTextStyle}>Сейчас: {settings.restSeconds} сек</p>
 
         <div style={{ display: "grid", gap: 12, maxWidth: 260 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "56px minmax(0, 1fr) 56px", gap: 10 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "56px minmax(0, 1fr) 56px",
+              gap: 10,
+            }}
+          >
             <button
               type="button"
               style={{ ...secondaryButtonStyle, paddingInline: 0, minHeight: 48 }}
-              onClick={() => persistRestSeconds(String(clampNumber(settings.restSeconds - 5, 0, 600)))}
+              onClick={() => adjustRestInput(-5)}
             >
               -5
             </button>
@@ -213,10 +280,18 @@ export default function ProfileScreen() {
               pattern="[0-9]*"
               value={restInput}
               onChange={(e) => {
-                setRestInput(sanitizeDigitsInput(e.target.value, 3));
+                const nextValue = sanitizeDigitsInput(e.target.value, 3);
+                setRestInput(nextValue);
                 setSaveMessage("");
+
+                if (nextValue.length > 0 && parsePositiveInt(nextValue) !== null) {
+                  scheduleRestSecondsSave(nextValue);
+                } else if (restSaveTimeoutRef.current !== null) {
+                  window.clearTimeout(restSaveTimeoutRef.current);
+                  restSaveTimeoutRef.current = null;
+                }
               }}
-              onBlur={() => persistRestSeconds(restInput)}
+              onBlur={flushRestSecondsSave}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.currentTarget.blur();
@@ -236,7 +311,7 @@ export default function ProfileScreen() {
             <button
               type="button"
               style={{ ...secondaryButtonStyle, paddingInline: 0, minHeight: 48 }}
-              onClick={() => persistRestSeconds(String(clampNumber(settings.restSeconds + 5, 0, 600)))}
+              onClick={() => adjustRestInput(5)}
             >
               +5
             </button>
@@ -302,8 +377,12 @@ export default function ProfileScreen() {
             <button
               style={{
                 ...buttonStyle,
-                background: "var(--danger-color)",
-                boxShadow: "0 8px 20px rgba(220, 38, 38, 0.25)",
+                background: settings.theme === "dark" ? "#fca5a5" : "var(--danger-color)",
+                color: settings.theme === "dark" ? "#1f2937" : "#fff",
+                boxShadow:
+                  settings.theme === "dark"
+                    ? "0 8px 20px rgba(248, 113, 113, 0.2)"
+                    : "0 8px 20px rgba(220, 38, 38, 0.25)",
               }}
               onClick={() => {
                 resetAll();

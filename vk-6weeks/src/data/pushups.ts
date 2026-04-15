@@ -29,10 +29,10 @@ function generatePlan(base: number, weeklyGrowth: number): WorkoutDay[] {
       const offset = (week - 1) * weeklyGrowth + (day - 1);
 
       const values = [
-        base + offset,
-        base + offset,
         base - 1 + offset,
         base - 1 + offset,
+        base + offset,
+        base + offset,
         base + 2 + offset,
       ].map((n) => Math.max(1, n));
 

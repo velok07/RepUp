@@ -16,6 +16,7 @@ export const buttonStyle: React.CSSProperties = {
   fontWeight: 700,
   fontSize: 15,
   boxShadow: "0 8px 20px rgba(37, 99, 235, 0.25)",
+  transition: "transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease",
 };
 
 export const secondaryButtonStyle: React.CSSProperties = {
@@ -27,6 +28,7 @@ export const secondaryButtonStyle: React.CSSProperties = {
   cursor: "pointer",
   fontWeight: 700,
   fontSize: 15,
+  transition: "transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease",
 };
 
 export const inputStyle: React.CSSProperties = {
@@ -38,6 +40,8 @@ export const inputStyle: React.CSSProperties = {
   fontSize: 15,
   background: "var(--card-bg)",
   color: "var(--text-color)",
+  outline: "none",
+  transition: "border-color 0.18s ease, box-shadow 0.18s ease",
 };
 
 export const pageTitleStyle: React.CSSProperties = {

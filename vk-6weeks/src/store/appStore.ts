@@ -52,6 +52,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...(persisted?.user ?? {}),
         },
         activeProgramId: persisted?.activeProgramId ?? null,
+        activeWorkoutSessions: persisted?.activeWorkoutSessions ?? {},
         progress: normalizeProgressMap(persisted?.progress ?? {}),
         settings: {
           ...defaultSettings,
@@ -74,10 +75,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         hydrated: true,
         user: defaultUser,
-        activeProgramId: null,
-        progress: {},
-        settings: defaultSettings,
-        userStats: defaultUserStats,
+      activeProgramId: null,
+      activeWorkoutSessions: {},
+      progress: {},
+      settings: defaultSettings,
+      userStats: defaultUserStats,
       });
     }
   },
@@ -108,11 +110,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         [session.programId]: session,
       },
     }));
+    void saveStateSafely(get());
   },
 
   clearActiveWorkoutSession: (programId) => {
     if (!programId) {
       set({ activeWorkoutSessions: {} });
+      void saveStateSafely(get());
       return;
     }
 
@@ -124,6 +128,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeWorkoutSessions: nextSessions,
       };
     });
+    void saveStateSafely(get());
   },
 
   updateSettings: (patch) => {
@@ -136,12 +141,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     void saveStateSafely(get());
   },
 
-  startProgram: (programId, level) => {
+  startProgram: (programId, level, loadAdjustment = 1) => {
     set((state) => ({
       activeProgramId: programId,
       progress: {
         ...state.progress,
-        [programId]: createInitialProgress(programId, level),
+        [programId]: createInitialProgress(programId, level, loadAdjustment),
       },
     }));
     void saveStateSafely(get());
@@ -163,29 +168,35 @@ export const useAppStore = create<AppState>((set, get) => ({
     void saveStateSafely(get());
   },
 
-  completeWorkout: (programId, payload) => {
+  completeWorkout: (programId, payload, options) => {
     const current = get().progress[programId];
     const program = programs.find((item) => item.id === programId);
+    const preserveProgress = options?.preserveProgress ?? false;
 
-    if (!current || current.finished || !program) return;
+    if (!current || !program) return;
+    if (current.finished && !preserveProgress) return;
 
     const workoutKey = makeWorkoutKey(payload.week, payload.day);
     const plannedTotal = payload.planned.reduce((sum, value) => sum + value, 0);
     const actualTotal = payload.actual.reduce((sum, value) => sum + value, 0);
 
     let nextWeek = current.currentWeek;
-    let nextDay = current.currentDay + 1;
-    let finished = false;
+    let nextDay = current.currentDay;
+    let finished = current.finished;
 
-    if (nextDay > program.workoutsPerWeek) {
-      nextDay = 1;
-      nextWeek += 1;
-    }
+    if (!preserveProgress) {
+      nextDay = current.currentDay + 1;
 
-    if (nextWeek > program.durationWeeks) {
-      finished = true;
-      nextWeek = program.durationWeeks;
-      nextDay = program.workoutsPerWeek;
+      if (nextDay > program.workoutsPerWeek) {
+        nextDay = 1;
+        nextWeek += 1;
+      }
+
+      if (nextWeek > program.durationWeeks) {
+        finished = true;
+        nextWeek = program.durationWeeks;
+        nextDay = program.workoutsPerWeek;
+      }
     }
 
     const nextLog: WorkoutLogItem = {
@@ -205,8 +216,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...state.progress,
         [programId]: {
           ...current,
-          completedWorkouts: addUnique(current.completedWorkouts, workoutKey),
-          failedWorkouts: removeValue(current.failedWorkouts, workoutKey),
+          completedWorkouts: preserveProgress
+            ? current.completedWorkouts
+            : addUnique(current.completedWorkouts, workoutKey),
+          failedWorkouts: preserveProgress
+            ? current.failedWorkouts
+            : removeValue(current.failedWorkouts, workoutKey),
           workoutLogs: upsertWorkoutLog(current.workoutLogs, nextLog),
           currentWeek: nextWeek,
           currentDay: nextDay,
@@ -222,9 +237,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     void saveStateSafely(get());
   },
 
-  failWorkout: (programId, payload) => {
+  failWorkout: (programId, payload, options) => {
     const current = get().progress[programId];
-    if (!current || current.finished) return;
+    const preserveProgress = options?.preserveProgress ?? false;
+    if (!current) return;
+    if (current.finished && !preserveProgress) return;
 
     const workoutKey = makeWorkoutKey(payload.week, payload.day);
     const plannedTotal = payload.planned.reduce((sum, value) => sum + value, 0);
@@ -247,8 +264,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...state.progress,
         [programId]: {
           ...current,
-          failedWorkouts: addUnique(current.failedWorkouts, workoutKey),
-          completedWorkouts: removeValue(current.completedWorkouts, workoutKey),
+          failedWorkouts: preserveProgress
+            ? current.failedWorkouts
+            : addUnique(current.failedWorkouts, workoutKey),
+          completedWorkouts: preserveProgress
+            ? current.completedWorkouts
+            : removeValue(current.completedWorkouts, workoutKey),
           workoutLogs: upsertWorkoutLog(current.workoutLogs, nextLog),
         },
       },
@@ -297,8 +318,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   resetAll: () => {
     const currentSettings = get().settings;
     const currentUser = get().user;
-
-    set({
+    const currentUserStats = get().userStats;
+    const nextState = {
       hydrated: true,
       user: currentUser,
       activeProgramId: null,
@@ -307,23 +328,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       settings: currentSettings,
       userStats: {
         ...defaultUserStats,
+        xp: currentUserStats.xp,
+        rewardedAchievementIds: currentUserStats.rewardedAchievementIds,
       },
-    });
+    };
 
-    void appApi.clear().catch((error) => {
-      console.error("Failed to clear backend state", error);
-    });
+    set(nextState);
+    void saveStateSafely(get());
   },
 }));
 
 function createInitialProgress(
   programId: UserProgramProgress["programId"],
-  level: number
+  level: number,
+  loadAdjustment: number
 ): UserProgramProgress {
   return {
     programId,
     level,
-    loadAdjustment: 1,
+    loadAdjustment,
     startedAt: new Date().toISOString(),
     currentWeek: 1,
     currentDay: 1,
@@ -360,6 +383,7 @@ async function saveStateSafely(state: AppState) {
     await appApi.save({
       user: state.user,
       activeProgramId: state.activeProgramId,
+      activeWorkoutSessions: state.activeWorkoutSessions,
       progress: state.progress,
       settings: state.settings,
       userStats: state.userStats,
@@ -372,8 +396,7 @@ async function saveStateSafely(state: AppState) {
 }
 
 function upsertWorkoutLog(items: WorkoutLogItem[], nextItem: WorkoutLogItem) {
-  const filtered = items.filter((item) => item.key !== nextItem.key);
-  return [...filtered, nextItem].sort(
+  return [...items, nextItem].sort(
     (a, b) => new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime()
   );
 }

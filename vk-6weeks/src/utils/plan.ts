@@ -13,6 +13,28 @@ export function getLevelByResult(programId: ProgramType, result: number): number
   return found?.level ?? 1;
 }
 
+export function getInitialLoadAdjustment(programId: ProgramType, result: number) {
+  const level = getLevelByResult(programId, result);
+  const firstWorkout = plansByProgram[programId]?.[level]?.[0] ?? null;
+
+  if (!firstWorkout) return 1;
+
+  const targets = firstWorkout.steps.map((step) => step.target);
+  const minTarget = Math.max(1, Math.min(...targets));
+  const maxTarget = Math.max(...targets);
+
+  if (result < minTarget) {
+    return clampLoadAdjustment(result / minTarget);
+  }
+
+  const highThreshold = minTarget + Math.max((maxTarget - minTarget) * 0.66, 1);
+  if (result >= highThreshold) {
+    return 1.1;
+  }
+
+  return 1;
+}
+
 export function getWorkoutByProgress(
   programId: ProgramType,
   level: number,
@@ -47,6 +69,8 @@ export function makeWorkoutKey(week: number, day: number) {
 }
 
 export function getLoadAdjustmentLabel(loadAdjustment = 1) {
+  if (loadAdjustment < 0.9) return "Щадящий старт";
+
   const preset = LOAD_ADJUSTMENT_PRESETS.find((item) => item.value === loadAdjustment);
   return preset?.label ?? "Стандарт";
 }
@@ -61,6 +85,10 @@ function applyLoadAdjustmentToWorkout(workout: WorkoutDay, loadAdjustment: numbe
       target: Math.max(1, Math.round(step.target * loadAdjustment)),
     })),
   };
+}
+
+function clampLoadAdjustment(value: number) {
+  return Math.min(1.1, Math.max(0.34, Number(value.toFixed(2))));
 }
 
 export const TOTAL_WEEKS = 8;
