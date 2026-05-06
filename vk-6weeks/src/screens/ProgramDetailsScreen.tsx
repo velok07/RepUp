@@ -1,7 +1,10 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { programs } from "../data/programs";
 import { useAppStore } from "../store/appStore";
-import { getLoadAdjustmentLabel, getProgramTotalWorkouts } from "../utils/plan";
+import {
+  getLoadAdjustmentPresetLabel,
+  getProgramTotalWorkouts,
+} from "../utils/plan";
 import {
   buttonStyle,
   cardStyle,
@@ -173,7 +176,7 @@ export default function ProgramDetailsScreen() {
 
             {progress ? (
               <div style={{ marginTop: 8, ...mutedTextStyle }}>
-                Нагрузка: {getLoadAdjustmentLabel(progress.loadAdjustment ?? 1)}
+                Нагрузка: {getLoadAdjustmentPresetLabel(progress.loadAdjustmentPreset ?? 1)}
               </div>
             ) : null}
           </>

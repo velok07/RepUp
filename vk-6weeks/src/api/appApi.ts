@@ -6,13 +6,15 @@ import type {
   UserProgramProgress,
   UserStats,
 } from "../types";
-import { parseURLSearchParamsForGetLaunchParams } from "@vkontakte/vk-bridge";
 import { vkSend } from "../lib/vkBridge";
 import { useAppStore } from "../store/appStore";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const LOCAL_STATE_KEY = "repup_persisted_state";
 let hasSuccessfulRemoteLoad = false;
+const MAX_PERSISTED_NUMERIC_VALUE = 99999;
+const MIN_LOAD_ADJUSTMENT = 0.1;
+const MAX_LOAD_ADJUSTMENT = 1.3;
 
 export type PersistedAppState = {
   user?: AppUser;
@@ -72,15 +74,53 @@ function getStoredVkId() {
 }
 
 function getRawLaunchParams() {
-  const raw = window.location.search.startsWith("?")
-    ? window.location.search.slice(1)
-    : window.location.search;
+  const found = getLaunchParamCandidates().find((candidate) =>
+    hasSignedLaunchParams(candidate.value)
+  );
 
-  if (!raw.includes("vk_user_id=") || !raw.includes("sign=")) {
+  if (!found) {
     return null;
   }
 
-  return raw;
+  console.log("[RepUp] signed launch params found", { source: found.source });
+  return found.value;
+}
+
+function getLaunchParamCandidates() {
+  const hash = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  const hashQueryIndex = hash.indexOf("?");
+  const firstHashVkIndex = hash.indexOf("vk_");
+
+  return [
+    { source: "search", value: window.location.search },
+    { source: "hash", value: hash },
+    {
+      source: "hash-query",
+      value: hashQueryIndex >= 0 ? hash.slice(hashQueryIndex + 1) : "",
+    },
+    {
+      source: "hash-vk",
+      value: firstHashVkIndex >= 0 ? hash.slice(firstHashVkIndex) : "",
+    },
+  ]
+    .map((candidate) => ({
+      ...candidate,
+      value: normalizeLaunchParamsCandidate(candidate.value),
+    }))
+    .filter((candidate): candidate is { source: string; value: string } =>
+      Boolean(candidate.value)
+    );
+}
+
+function normalizeLaunchParamsCandidate(value: string) {
+  return value.trim().replace(/^[?#&]+/, "");
+}
+
+function hasSignedLaunchParams(value: string) {
+  const params = new URLSearchParams(value);
+  return Boolean(params.get("vk_user_id") && params.get("sign"));
 }
 
 function setStoredToken(token: string, vkId?: number | null) {
@@ -113,7 +153,7 @@ function readLocalState(): PersistedAppState {
     if (!raw) return DEFAULT_STATE;
 
     const parsed = JSON.parse(raw) as Partial<PersistedAppState>;
-    return {
+    return sanitizePersistedState({
       ...DEFAULT_STATE,
       ...parsed,
       user: {
@@ -135,7 +175,7 @@ function readLocalState(): PersistedAppState {
         rewardedAchievementIds: parsed.userStats?.rewardedAchievementIds ?? [],
         pendingAchievementIds: parsed.userStats?.pendingAchievementIds ?? [],
       },
-    };
+    });
   } catch (error) {
     console.warn("[RepUp] failed to read local persisted state", error);
     return DEFAULT_STATE;
@@ -144,7 +184,7 @@ function readLocalState(): PersistedAppState {
 
 function writeLocalState(state: PersistedAppState) {
   try {
-    localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify(state));
+    localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify(sanitizePersistedState(state)));
   } catch (error) {
     console.warn("[RepUp] failed to write local persisted state", error);
   }
@@ -165,25 +205,26 @@ function isMeaningfullyEmptyState(state: PersistedAppState | null | undefined) {
 }
 
 function applyPersistedStateToStore(state: PersistedAppState) {
+  const sanitizedState = sanitizePersistedState(state);
   const currentState = useAppStore.getState();
 
   useAppStore.setState({
     user: {
       ...currentState.user,
-      ...(state.user ?? {}),
+      ...(sanitizedState.user ?? {}),
     },
-    activeProgramId: state.activeProgramId ?? null,
-    activeWorkoutSessions: state.activeWorkoutSessions ?? {},
-    progress: state.progress ?? {},
+    activeProgramId: sanitizedState.activeProgramId ?? null,
+    activeWorkoutSessions: sanitizedState.activeWorkoutSessions ?? {},
+    progress: sanitizedState.progress ?? {},
     settings: {
       ...currentState.settings,
-      ...(state.settings ?? {}),
+      ...(sanitizedState.settings ?? {}),
     },
     userStats: {
       ...currentState.userStats,
-      ...(state.userStats ?? {}),
-      rewardedAchievementIds: state.userStats?.rewardedAchievementIds ?? [],
-      pendingAchievementIds: state.userStats?.pendingAchievementIds ?? [],
+      ...(sanitizedState.userStats ?? {}),
+      rewardedAchievementIds: sanitizedState.userStats?.rewardedAchievementIds ?? [],
+      pendingAchievementIds: sanitizedState.userStats?.pendingAchievementIds ?? [],
     },
   });
 }
@@ -231,11 +272,11 @@ function isLocalDevelopmentHost() {
 
 function getLaunchParamsVkId() {
   try {
-    const params = parseURLSearchParamsForGetLaunchParams(window.location.search);
-    const rawVkId =
-      "vk_user_id" in params && typeof params.vk_user_id === "string"
-        ? params.vk_user_id
-        : null;
+    const rawLaunchParams = getRawLaunchParams();
+    if (!rawLaunchParams) return null;
+
+    const params = new URLSearchParams(rawLaunchParams);
+    const rawVkId = params.get("vk_user_id");
 
     if (!rawVkId) return null;
 
@@ -432,9 +473,145 @@ async function loadRemoteState(): Promise<PersistedAppState | null> {
     return null;
   }
 
-  const data = (await res.json()) as PersistedAppState;
+  const data = sanitizePersistedState((await res.json()) as PersistedAppState);
   hasSuccessfulRemoteLoad = true;
   return data;
+}
+
+function sanitizePersistedState(state: Partial<PersistedAppState> | null | undefined): PersistedAppState {
+  return {
+    user: {
+      id: state?.user?.id ?? null,
+      vkId: sanitizeNullableVkId(state?.user?.vkId),
+      firstName: state?.user?.firstName,
+      lastName: state?.user?.lastName,
+      photoUrl: state?.user?.photoUrl,
+    },
+    activeProgramId: state?.activeProgramId ?? null,
+    activeWorkoutSessions: normalizeActiveWorkoutSessions(state?.activeWorkoutSessions ?? {}),
+    progress: normalizeProgressMap(state?.progress ?? {}),
+    settings: {
+      ...DEFAULT_STATE.settings,
+      ...(state?.settings ?? {}),
+      restSeconds: sanitizeNonNegativeInteger(state?.settings?.restSeconds),
+      autoFillTargetOnComplete:
+        typeof state?.settings?.autoFillTargetOnComplete === "boolean"
+          ? state.settings.autoFillTargetOnComplete
+          : DEFAULT_STATE.settings.autoFillTargetOnComplete,
+      theme: state?.settings?.theme === "dark" ? "dark" : "light",
+    },
+    userStats: {
+      xp: sanitizeNonNegativeInteger(state?.userStats?.xp),
+      rewardedAchievementIds: Array.isArray(state?.userStats?.rewardedAchievementIds)
+        ? state.userStats.rewardedAchievementIds.filter((item): item is string => typeof item === "string")
+        : [],
+      pendingAchievementIds: Array.isArray(state?.userStats?.pendingAchievementIds)
+        ? state.userStats.pendingAchievementIds.filter((item): item is string => typeof item === "string")
+        : [],
+    },
+  };
+}
+
+function normalizeProgressMap(progressMap: Partial<PersistedAppState["progress"]>) {
+  return Object.fromEntries(
+    Object.entries(progressMap ?? {}).map(([programId, progress]) => [
+      programId,
+      progress
+        ? {
+            ...progress,
+            level: sanitizePositiveInteger(progress.level, 1),
+            baseLoadAdjustment: sanitizeLoadAdjustment(
+              progress.baseLoadAdjustment ?? progress.loadAdjustment
+            ),
+            loadAdjustmentPreset: sanitizeLoadAdjustment(progress.loadAdjustmentPreset ?? 1),
+            loadAdjustment: sanitizeLoadAdjustment(progress.loadAdjustment),
+            currentWeek: sanitizePositiveInteger(progress.currentWeek, 1),
+            currentDay: sanitizePositiveInteger(progress.currentDay, 1),
+            completedWorkouts: Array.isArray(progress.completedWorkouts)
+              ? progress.completedWorkouts.filter((item): item is string => typeof item === "string")
+              : [],
+            failedWorkouts: Array.isArray(progress.failedWorkouts)
+              ? progress.failedWorkouts.filter((item): item is string => typeof item === "string")
+              : [],
+            workoutLogs: Array.isArray(progress.workoutLogs)
+              ? progress.workoutLogs.map((log) => ({
+                  ...log,
+                  week: sanitizePositiveInteger(log.week, 1),
+                  day: sanitizePositiveInteger(log.day, 1),
+                  planned: normalizeNumberArray(log.planned),
+                  actual: normalizeNumberArray(log.actual),
+                  plannedTotal: sanitizeNonNegativeInteger(log.plannedTotal),
+                  actualTotal: sanitizeNonNegativeInteger(log.actualTotal),
+                }))
+              : [],
+          }
+        : progress,
+    ])
+  ) as PersistedAppState["progress"];
+}
+
+function normalizeActiveWorkoutSessions(
+  sessions: Partial<Record<ProgramType, ActiveWorkoutSession>>
+) {
+  return Object.fromEntries(
+    Object.entries(sessions ?? {}).map(([programId, session]) => [
+      programId,
+      session
+        ? {
+            ...session,
+            week: sanitizePositiveInteger(session.week, 1),
+            day: sanitizePositiveInteger(session.day, 1),
+            currentStep: sanitizeNonNegativeInteger(session.currentStep),
+            actuals: normalizeNumberArray(session.actuals),
+            stepTimeLeft: sanitizeNullableNumber(session.stepTimeLeft),
+            restLeft: sanitizeNonNegativeInteger(session.restLeft),
+            actualValue: sanitizeNumericString(session.actualValue),
+          }
+        : session,
+    ])
+  ) as PersistedAppState["activeWorkoutSessions"];
+}
+
+function normalizeNumberArray(values: unknown) {
+  if (!Array.isArray(values)) return [];
+
+  return values
+    .map((value) => sanitizeNonNegativeInteger(value))
+    .filter((value) => Number.isFinite(value));
+}
+
+function sanitizePositiveInteger(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(MAX_PERSISTED_NUMERIC_VALUE, Math.max(1, Math.round(parsed)));
+}
+
+function sanitizeNonNegativeInteger(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.min(MAX_PERSISTED_NUMERIC_VALUE, Math.round(parsed));
+}
+
+function sanitizeNullableNumber(value: unknown) {
+  if (value === null || value === undefined) return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sanitizeNumericString(value: unknown) {
+  if (typeof value !== "string") return "";
+  return value.replace(/\D/g, "").slice(0, 6);
+}
+
+function sanitizeLoadAdjustment(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.min(MAX_LOAD_ADJUSTMENT, Math.max(MIN_LOAD_ADJUSTMENT, Number(parsed.toFixed(2))));
+}
+
+function sanitizeNullableVkId(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export const appApi = {
@@ -513,7 +690,11 @@ export const appApi = {
     }
   },
 
-  async clear(): Promise<void> {
+  async clear(state?: PersistedAppState): Promise<void> {
+    if (state) {
+      writeLocalState(state);
+    }
+
     const res = await authorizedRequest(
       `${API_URL}/me/reset`,
       {

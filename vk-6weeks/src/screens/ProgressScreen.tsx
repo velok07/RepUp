@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { buttonStyle, cardStyle, mutedTextStyle, pageTitleStyle } from "../components/ui";
 import { programs } from "../data/programs";
 import { useAppStore } from "../store/appStore";
-import { getProgramTotalWorkouts } from "../utils/plan";
 import type { WorkoutLogItem } from "../types";
+import { getProgramTotalWorkouts } from "../utils/plan";
 
 const DAYS_TO_SHOW = 7;
 
@@ -67,7 +67,7 @@ export default function ProgressScreen() {
           <h1 style={pageTitleStyle}>Прогресс</h1>
           <p style={mutedTextStyle}>
             Пока нет истории тренировок. Начни программу и заверши хотя бы одну тренировку,
-            чтобы увидеть графики и журнал попыток.
+            чтобы увидеть прогресс и журнал попыток.
           </p>
           <div style={{ marginTop: 16 }}>
             <button style={buttonStyle} onClick={() => navigate("/programs")}>
@@ -229,9 +229,6 @@ export default function ProgressScreen() {
       <section style={cardStyle}>
         <div style={{ marginBottom: 14 }}>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>История тренировок</h2>
-          <p style={{ ...mutedTextStyle, marginTop: 8 }}>
-            Только главное: когда была тренировка, какой был план и что получилось по факту.
-          </p>
         </div>
 
         {logs.length === 0 ? (
@@ -271,13 +268,16 @@ function HistoryCard({
     <div
       style={{
         borderRadius: 22,
-        padding: 16,
+        padding: 18,
         background:
-          "linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 96%, #ffffff 4%) 0%, var(--soft-bg) 100%)",
-        border: "1px solid color-mix(in srgb, var(--border-color) 88%, transparent)",
+          "linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 76%, var(--primary-color) 24%) 0%, color-mix(in srgb, var(--soft-bg) 80%, var(--primary-strong) 20%) 100%)",
+        border: "1px solid color-mix(in srgb, var(--border-color) 72%, var(--primary-color) 28%)",
+        boxShadow: "0 10px 26px rgba(79, 141, 247, 0.08)",
+        display: "grid",
+        gap: 12,
       }}
     >
-      <div style={{ marginBottom: 14 }}>
+      <div>
         <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.1, marginBottom: 6 }}>
           {title}
         </div>
@@ -288,59 +288,84 @@ function HistoryCard({
 
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          gap: 10,
+          fontSize: 28,
+          lineHeight: 1.2,
+          fontWeight: 700,
+          letterSpacing: "-0.02em",
+          color: "var(--text-color)",
+          overflowWrap: "anywhere",
+          wordBreak: "break-word",
         }}
       >
-        <MetricTile label="План" value={joinMetric(log.planned)} />
-        <MetricTile
-          label="Факт"
-          value={joinMetric(log.actual)}
-          tone={log.actualTotal < log.plannedTotal ? "danger" : "default"}
-        />
-        <MetricTile label="Итог" value={`${log.actualTotal}/${log.plannedTotal}`} />
+        {joinMetric(log.actual)}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-color)" }}>
+          Итого {log.actualTotal}
+        </div>
+        <HistoryStatus planned={log.plannedTotal} actual={log.actualTotal} />
       </div>
     </div>
   );
 }
 
-function MetricTile({
-  label,
-  value,
-  tone = "default",
+function HistoryStatus({
+  planned,
+  actual,
 }: {
-  label: string;
-  value: string;
-  tone?: "default" | "danger";
+  planned: number;
+  actual: number;
 }) {
+  const status =
+    actual === planned
+      ? {
+          label: "По плану",
+          background: "rgba(72, 187, 120, 0.22)",
+          color: "#2f9e62",
+          border: "rgba(72, 187, 120, 0.34)",
+        }
+      : actual < planned
+      ? {
+          label: "Ниже плана",
+          background: "rgba(245, 158, 11, 0.22)",
+          color: "#c67a08",
+          border: "rgba(245, 158, 11, 0.34)",
+        }
+      : {
+          label: "Выше плана",
+          background: "rgba(56, 189, 248, 0.22)",
+          color: "#1683ba",
+          border: "rgba(56, 189, 248, 0.34)",
+        };
+
   return (
-    <div
+    <span
       style={{
-        minHeight: 88,
-        borderRadius: 18,
-        padding: 12,
-        background: "color-mix(in srgb, var(--card-bg) 88%, var(--soft-bg) 12%)",
-        border: "1px solid color-mix(in srgb, var(--border-color) 90%, transparent)",
-        boxSizing: "border-box",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: 32,
+        padding: "6px 12px",
+        borderRadius: 999,
+        background: status.background,
+        color: status.color,
+        border: `1px solid ${status.border}`,
+        fontSize: 13,
+        fontWeight: 700,
+        letterSpacing: "0.01em",
       }}
     >
-      <div style={{ color: "var(--muted-text-color)", fontSize: 13, marginBottom: 8 }}>
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: 16,
-          lineHeight: 1.3,
-          fontWeight: 700,
-          color: tone === "danger" ? "#d14343" : "var(--text-color)",
-          whiteSpace: "normal",
-          overflowWrap: "anywhere",
-        }}
-      >
-        {value}
-      </div>
-    </div>
+      {status.label}
+    </span>
   );
 }
 
@@ -498,7 +523,7 @@ function ArrowRightIcon() {
 }
 
 function joinMetric(values: number[]) {
-  return values.join(" / ");
+  return values.join(" · ");
 }
 
 function buildMonthlyActivity(logs: WorkoutLogItem[]) {

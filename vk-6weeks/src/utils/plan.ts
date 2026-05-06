@@ -7,6 +7,9 @@ export const LOAD_ADJUSTMENT_PRESETS = [
   { value: 1.1, label: "Интенсивнее" },
 ] as const;
 
+const MIN_LOAD_ADJUSTMENT = 0.1;
+const MAX_LOAD_ADJUSTMENT = 1.3;
+
 export function getLevelByResult(programId: ProgramType, result: number): number {
   const levels = levelsByProgram[programId] ?? [];
   const found = levels.find((item) => result >= item.min && result <= item.max);
@@ -31,19 +34,18 @@ export function getInitialLoadAdjustment(programId: ProgramType, result: number)
   if (!firstWorkout) return 1;
 
   const targets = firstWorkout.steps.map((step) => step.target);
-  const minTarget = Math.max(1, Math.min(...targets));
   const maxTarget = Math.max(...targets);
 
-  if (result < minTarget) {
-    return clampLoadAdjustment(result / minTarget);
+  if (result <= maxTarget) {
+    return clampLoadAdjustment(result / maxTarget);
   }
 
-  const highThreshold = minTarget + Math.max((maxTarget - minTarget) * 0.66, 1);
-  if (result >= highThreshold) {
-    return 1.1;
-  }
+  const overshootRatio = (result - maxTarget) / Math.max(maxTarget, 1);
+  return clampLoadAdjustment(1 + Math.min(0.3, overshootRatio * 0.18));
+}
 
-  return 1;
+export function applyLoadAdjustmentPreset(baseLoadAdjustment = 1, loadAdjustmentPreset = 1) {
+  return clampLoadAdjustment(baseLoadAdjustment * loadAdjustmentPreset);
 }
 
 export function getWorkoutByProgress(
@@ -56,8 +58,15 @@ export function getWorkoutByProgress(
   const plan = plansByProgram[programId]?.[level];
   if (!plan) return null;
 
-  const workout = plan.find((w) => w.week === currentWeek && w.day === currentDay) ?? null;
-  return workout ? applyLoadAdjustmentToWorkout(workout, loadAdjustment) : null;
+  const workoutIndex = plan.findIndex((w) => w.week === currentWeek && w.day === currentDay);
+  if (workoutIndex < 0) return null;
+
+  const initialCap = getEarlyWorkoutCap(plan, loadAdjustment);
+  return applyLoadAdjustmentToWorkout(
+    plan[workoutIndex],
+    getProgressiveLoadAdjustment(loadAdjustment, workoutIndex, plan.length),
+    workoutIndex < 3 ? initialCap : null
+  );
 }
 
 export function getAdjustedPlanByLevel(
@@ -66,7 +75,15 @@ export function getAdjustedPlanByLevel(
   loadAdjustment = 1
 ) {
   const plan = plansByProgram[programId]?.[level] ?? [];
-  return plan.map((workout) => applyLoadAdjustmentToWorkout(workout, loadAdjustment));
+  const initialCap = getEarlyWorkoutCap(plan, loadAdjustment);
+
+  return plan.map((workout, index) =>
+    applyLoadAdjustmentToWorkout(
+      workout,
+      getProgressiveLoadAdjustment(loadAdjustment, index, plan.length),
+      index < 3 ? initialCap : null
+    )
+  );
 }
 
 export function getProgramTotalWorkouts(
@@ -86,20 +103,69 @@ export function getLoadAdjustmentLabel(loadAdjustment = 1) {
   return preset?.label ?? "Стандарт";
 }
 
-function applyLoadAdjustmentToWorkout(workout: WorkoutDay, loadAdjustment: number): WorkoutDay {
+export function getLoadAdjustmentPresetLabel(loadAdjustmentPreset = 1) {
+  const preset = LOAD_ADJUSTMENT_PRESETS.find((item) => item.value === loadAdjustmentPreset);
+  return preset?.label ?? "Стандарт";
+}
+
+function applyLoadAdjustmentToWorkout(
+  workout: WorkoutDay,
+  loadAdjustment: number,
+  maxCap: number | null = null
+): WorkoutDay {
   if (loadAdjustment === 1) return workout;
 
   return {
     ...workout,
     steps: workout.steps.map((step) => ({
       ...step,
-      target: Math.max(1, Math.round(step.target * loadAdjustment)),
+      target: clampWorkoutTarget(Math.round(step.target * loadAdjustment), maxCap),
     })),
   };
 }
 
+function getEarlyWorkoutCap(plan: WorkoutDay[], loadAdjustment: number) {
+  if (loadAdjustment >= 1 || plan.length === 0) return null;
+
+  const firstWorkoutMax = Math.max(...plan[0].steps.map((step) => step.target));
+  const testedMaxEstimate = clampWorkoutTarget(Math.round(firstWorkoutMax * loadAdjustment), null);
+
+  if (testedMaxEstimate > 5) return null;
+
+  return testedMaxEstimate;
+}
+
+function clampWorkoutTarget(value: number, maxCap: number | null) {
+  const minValue = Math.max(1, value);
+  return maxCap ? Math.min(minValue, maxCap) : minValue;
+}
+
+function getProgressiveLoadAdjustment(
+  baseLoadAdjustment: number,
+  workoutIndex: number,
+  totalWorkouts: number
+) {
+  const progress = totalWorkouts <= 1 ? 1 : workoutIndex / (totalWorkouts - 1);
+
+  if (baseLoadAdjustment < 1) {
+    const finalAdjustment = Math.min(1, baseLoadAdjustment + (1 - baseLoadAdjustment) * 0.45);
+    return clampLoadAdjustment(
+      baseLoadAdjustment + (finalAdjustment - baseLoadAdjustment) * progress
+    );
+  }
+
+  if (baseLoadAdjustment > 1) {
+    const finalAdjustment = 1 + (baseLoadAdjustment - 1) * 0.7;
+    return clampLoadAdjustment(
+      baseLoadAdjustment - (baseLoadAdjustment - finalAdjustment) * progress
+    );
+  }
+
+  return 1;
+}
+
 function clampLoadAdjustment(value: number) {
-  return Math.min(1.1, Math.max(0.34, Number(value.toFixed(2))));
+  return Math.min(MAX_LOAD_ADJUSTMENT, Math.max(MIN_LOAD_ADJUSTMENT, Number(value.toFixed(2))));
 }
 
 export const TOTAL_WEEKS = 8;

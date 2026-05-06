@@ -95,3 +95,135 @@ input:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--primary-color) 74%, white 26%);
   outline-offset: 2px;
 }
+
+.program-card {
+  will-change: transform, opacity;
+  transform: translateX(0) scale(1);
+  opacity: 1;
+}
+
+.program-card-overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.program-card.exit-left {
+  animation: program-card-exit-left 170ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.program-card.exit-right {
+  animation: program-card-exit-right 170ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.program-card.enter-right {
+  animation: program-card-enter-right 210ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.program-card.enter-left {
+  animation: program-card-enter-left 210ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.app-shell {
+  width: 100%;
+}
+
+.workout-screen {
+  width: 100%;
+}
+
+@keyframes program-card-exit-left {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-12px) scale(0.992);
+  }
+}
+
+@keyframes program-card-exit-right {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(12px) scale(0.992);
+  }
+}
+
+@keyframes program-card-enter-right {
+  from {
+    opacity: 0;
+    transform: translateX(12px) scale(0.992);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@media (min-width: 768px) {
+  .app-shell-root {
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .app-shell {
+    max-width: 860px !important;
+    height: 100vh !important;
+    min-height: 100vh !important;
+    display: grid !important;
+    grid-template-rows: auto minmax(0, 1fr) auto !important;
+  }
+
+  .app-shell-header {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .app-shell-main {
+    flex: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    padding-bottom: 20px !important;
+  }
+
+  .app-shell-main > * {
+    width: 100%;
+  }
+
+  .app-shell-nav {
+    position: static !important;
+    margin-top: 0 !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    padding-top: 0 !important;
+    padding-bottom: 12px !important;
+  }
+
+  .workout-screen {
+    margin: 0 auto;
+    max-width: 760px;
+  }
+}
+
+@keyframes program-card-enter-left {
+  from {
+    opacity: 0;
+    transform: translateX(-12px) scale(0.992);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}

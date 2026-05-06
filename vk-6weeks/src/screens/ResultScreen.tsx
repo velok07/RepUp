@@ -29,11 +29,17 @@ export default function ResultScreen() {
         <p style={mutedTextStyle}>
           Похоже, эта тренировка уже завершилась раньше. Открой главную страницу или прогресс.
         </p>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <button style={buttonStyle} onClick={() => navigate("/")}>
+        <div
+          style={{
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          }}
+        >
+          <button style={{ ...buttonStyle, width: "100%", minHeight: 58 }} onClick={() => navigate("/")}>
             На главную
           </button>
-          <button style={secondaryButtonStyle} onClick={() => navigate("/progress")}>
+          <button style={{ ...secondaryButtonStyle, width: "100%", minHeight: 58 }} onClick={() => navigate("/progress")}>
             Прогресс
           </button>
         </div>
@@ -43,6 +49,9 @@ export default function ResultScreen() {
 
   const isSuccess = result.actualTotal >= result.plannedTotal;
   const shortUnit = "повт.";
+  const scheduleLabel = `Неделя ${result.week} · День ${result.day}`;
+  const titleLooksLikeSchedule = /неделя\s*\d+/i.test(result.title) || /день\s*\d+/i.test(result.title);
+  const titleLine = titleLooksLikeSchedule ? null : result.title;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -59,10 +68,10 @@ export default function ResultScreen() {
         <h2 style={{ ...pageTitleStyle, color: "#fff", marginBottom: 6 }}>
           {isSuccess ? "Тренировка завершена" : "Попробуй ещё раз"}
         </h2>
-        <p style={{ marginTop: 0, marginBottom: 4 }}>{result.title}</p>
-        <p style={{ marginTop: 0, opacity: 0.9 }}>
-          Неделя {result.week}, день {result.day}
-        </p>
+
+        {titleLine ? <p style={{ marginTop: 0, marginBottom: 4 }}>{titleLine}</p> : null}
+
+        <p style={{ marginTop: 0, opacity: 0.9 }}>{scheduleLabel}</p>
 
         <div
           style={{
@@ -100,11 +109,20 @@ export default function ResultScreen() {
         </div>
       ) : null}
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <button style={buttonStyle} onClick={() => navigate("/")}>
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        }}
+      >
+        <button style={{ ...buttonStyle, width: "100%", minHeight: 58 }} onClick={() => navigate("/")}>
           Продолжить
         </button>
-        <button style={secondaryButtonStyle} onClick={() => navigate("/progress")}>
+        <button
+          style={{ ...secondaryButtonStyle, width: "100%", minHeight: 58 }}
+          onClick={() => navigate("/progress")}
+        >
           Посмотреть прогресс
         </button>
       </div>

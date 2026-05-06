@@ -1,17 +1,19 @@
 import { create } from "zustand";
 import { appApi } from "../api/appApi";
+import type { PersistedAppState } from "../api/appApi";
 import { programs } from "../data/programs";
 import type {
   ActiveWorkoutSession,
   AppSettings,
   AppState,
   AppUser,
+  ProgramType,
   UserProgramProgress,
   UserStats,
   WorkoutLogItem,
 } from "../types";
 import { ACHIEVEMENT_XP_REWARD } from "../utils/achievements";
-import { makeWorkoutKey } from "../utils/plan";
+import { applyLoadAdjustmentPreset, makeWorkoutKey } from "../utils/plan";
 
 const defaultSettings: AppSettings = {
   restSeconds: 60,
@@ -31,6 +33,10 @@ const defaultUser: AppUser = {
 };
 
 const MAX_UI_NUMERIC_VALUE = 99999;
+const MIN_LOAD_ADJUSTMENT = 0.1;
+const MAX_LOAD_ADJUSTMENT = 1.3;
+let latestPendingSave: PersistedAppState | null = null;
+let saveFlushInFlight: Promise<void> | null = null;
 
 export const useAppStore = create<AppState>((set, get) => ({
   hydrated: false,
@@ -154,12 +160,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     const current = get().progress[programId];
     if (!current) return;
 
+    const nextEffectiveLoadAdjustment = applyLoadAdjustmentPreset(
+      current.baseLoadAdjustment ?? current.loadAdjustment ?? 1,
+      loadAdjustment
+    );
+
     set((state) => ({
+      activeWorkoutSessions: removeProgramSession(state.activeWorkoutSessions, programId),
       progress: {
         ...state.progress,
         [programId]: {
           ...current,
-          loadAdjustment,
+          loadAdjustmentPreset: loadAdjustment,
+          loadAdjustment: nextEffectiveLoadAdjustment,
         },
       },
     }));
@@ -210,6 +223,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     };
 
     set((state) => ({
+      activeWorkoutSessions: removeProgramSession(state.activeWorkoutSessions, programId),
       progress: {
         ...state.progress,
         [programId]: {
@@ -332,7 +346,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     };
 
     set(nextState);
-    void saveStateSafely(get());
+    void appApi.clear({
+      user: nextState.user,
+      activeProgramId: nextState.activeProgramId,
+      activeWorkoutSessions: nextState.activeWorkoutSessions,
+      progress: nextState.progress,
+      settings: nextState.settings,
+      userStats: nextState.userStats,
+    });
   },
 }));
 
@@ -344,6 +365,8 @@ function createInitialProgress(
   return {
     programId,
     level,
+    baseLoadAdjustment: loadAdjustment,
+    loadAdjustmentPreset: 1,
     loadAdjustment,
     startedAt: new Date().toISOString(),
     currentWeek: 1,
@@ -363,6 +386,10 @@ function normalizeProgressMap(progressMap: Partial<AppState["progress"]>) {
         ? {
             ...progress,
             level: sanitizePositiveInteger(progress.level, 1),
+            baseLoadAdjustment: sanitizeLoadAdjustment(
+              progress.baseLoadAdjustment ?? progress.loadAdjustment
+            ),
+            loadAdjustmentPreset: sanitizeLoadAdjustment(progress.loadAdjustmentPreset ?? 1),
             loadAdjustment: sanitizeLoadAdjustment(progress.loadAdjustment),
             currentWeek: sanitizePositiveInteger(progress.currentWeek, 1),
             currentDay: sanitizePositiveInteger(progress.currentDay, 1),
@@ -445,31 +472,68 @@ function sanitizeNumericString(value: unknown) {
 function sanitizeLoadAdjustment(value: unknown) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 1;
-  return Math.min(1.1, Math.max(0.34, Number(parsed.toFixed(2))));
+  return Math.min(MAX_LOAD_ADJUSTMENT, Math.max(MIN_LOAD_ADJUSTMENT, Number(parsed.toFixed(2))));
 }
 
 async function saveStateSafely(state: AppState) {
-  try {
-    console.log("[RepUp] saving state", {
-      activeProgramId: state.activeProgramId,
-      progressKeys: Object.keys(state.progress),
-      xp: state.userStats.xp,
-      vkId: state.user.vkId,
-    });
+  latestPendingSave = buildPersistedStateForSave(state);
 
-    await appApi.save({
-      user: state.user,
-      activeProgramId: state.activeProgramId,
-      activeWorkoutSessions: state.activeWorkoutSessions,
-      progress: state.progress,
-      settings: state.settings,
-      userStats: state.userStats,
-    });
-
-    console.log("[RepUp] state saved");
-  } catch (error) {
-    console.error("[RepUp] failed to save state", error);
+  if (saveFlushInFlight) {
+    return saveFlushInFlight;
   }
+
+  saveFlushInFlight = (async () => {
+    while (latestPendingSave) {
+      const stateToSave = latestPendingSave;
+      latestPendingSave = null;
+
+      try {
+        console.log("[RepUp] saving state", {
+          activeProgramId: stateToSave.activeProgramId,
+          activeWorkoutSessionKeys: Object.keys(stateToSave.activeWorkoutSessions ?? {}),
+          progressKeys: Object.keys(stateToSave.progress),
+          xp: stateToSave.userStats.xp,
+          vkId: stateToSave.user?.vkId ?? null,
+        });
+
+        await appApi.save(stateToSave);
+
+        console.log("[RepUp] state saved");
+      } catch (error) {
+        console.error("[RepUp] failed to save state", error);
+      }
+    }
+  })().finally(() => {
+    saveFlushInFlight = null;
+  });
+
+  return saveFlushInFlight;
+}
+
+function buildPersistedStateForSave(state: AppState): PersistedAppState {
+  const persistedState: PersistedAppState = {
+    user: state.user,
+    activeProgramId: state.activeProgramId,
+    activeWorkoutSessions: state.activeWorkoutSessions,
+    progress: state.progress,
+    settings: state.settings,
+    userStats: state.userStats,
+  };
+
+  if (typeof structuredClone === "function") {
+    return structuredClone(persistedState);
+  }
+
+  return JSON.parse(JSON.stringify(persistedState)) as PersistedAppState;
+}
+
+function removeProgramSession(
+  sessions: AppState["activeWorkoutSessions"],
+  programId: ProgramType
+): AppState["activeWorkoutSessions"] {
+  const nextSessions = { ...sessions };
+  delete nextSessions[programId];
+  return nextSessions;
 }
 
 function upsertWorkoutLog(items: WorkoutLogItem[], nextItem: WorkoutLogItem) {

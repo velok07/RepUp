@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useCallback } from "react";
 import { useAppStore } from "../store/appStore";
 import { getAdjustedPlanByLevel, getWorkoutByProgress } from "../utils/plan";
 import {
@@ -64,10 +65,15 @@ export default function WorkoutScreen() {
   const [showAchievementToast, setShowAchievementToast] = useState(false);
   const [toastAchievementIds, setToastAchievementIds] = useState<string[]>([]);
   const [showExitDialog, setShowExitDialog] = useState(false);
+  const [isDesktopWide, setIsDesktopWide] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 768 : false
+  );
   const [completedWorkoutInfo, setCompletedWorkoutInfo] = useState<{
     week: number;
     day: number;
     title: string;
+    planned: number[];
+    actual: number[];
     plannedTotal: number;
     actualTotal: number;
     gainedXp: number;
@@ -111,15 +117,15 @@ export default function WorkoutScreen() {
     return achievements.filter((item) => pendingSet.has(item.id));
   }, [toastAchievementIds]);
 
-  const currentWorkoutProgressPercent = workout
-    ? Math.round((actuals.length / workout.steps.length) * 100)
-    : 0;
-  const completedSets = actuals.length;
-  const remainingSets = workout ? Math.max(workout.steps.length - completedSets, 0) : 0;
-  const plannedValues = workout?.steps.map((step) => step.target) ?? [];
-  const plannedTotal = plannedValues.reduce((sum, value) => sum + value, 0);
+  const plannedValues = useMemo(
+    () => workout?.steps.map((step) => step.target) ?? [],
+    [workout]
+  );
+  const plannedTotal = useMemo(
+    () => plannedValues.reduce((sum, value) => sum + value, 0),
+    [plannedValues]
+  );
   const actualTotalSoFar = actuals.reduce((sum, value) => sum + value, 0);
-  const nextStep = workout?.steps[currentStep + 1] ?? null;
   const isTimedWorkout = program?.unit === "seconds";
   const previewActualValue = editActual ? Number(actualValue) : null;
   const currentStepPreviewValue =
@@ -130,20 +136,52 @@ export default function WorkoutScreen() {
   const hasValidActualValue =
     actualValue.length > 0 && parsedActualValue !== null && parsedActualValue >= 0;
 
-  const completeRest = () => {
-    setRestLeft(0);
-    setRestEndsAt(null);
-    setResting(false);
-    setCurrentStep((current) => current + 1);
-    setActualValue("");
-    setEditActual(false);
-  };
-
-  const resetStepTimer = () => {
+  const resetStepTimer = useCallback(() => {
     setStepTimerRunning(false);
     setStepTimeLeft(0);
     setStepTimerEndsAt(null);
-  };
+  }, [setStepTimeLeft, setStepTimerEndsAt, setStepTimerRunning]);
+
+  const startTimedStep = useCallback((durationSeconds: number) => {
+    const nextStepTimerEndsAt = new Date(Date.now() + durationSeconds * 1000).toISOString();
+    setStepTimerRunning(true);
+    setStepTimeLeft(durationSeconds);
+    setStepTimerEndsAt(nextStepTimerEndsAt);
+    setEditActual(false);
+    setActualValue("");
+  }, [
+    setActualValue,
+    setEditActual,
+    setStepTimeLeft,
+    setStepTimerEndsAt,
+    setStepTimerRunning,
+  ]);
+
+  const completeRest = useCallback(() => {
+    const nextStep = currentStep + 1;
+
+    setRestLeft(0);
+    setRestEndsAt(null);
+    setResting(false);
+    setCurrentStep(nextStep);
+    setActualValue("");
+    setEditActual(false);
+
+    if (isTimedWorkout && workout && actuals[nextStep] === undefined) {
+      startTimedStep(currentTargetValue(workout, nextStep));
+    }
+  }, [
+    actuals,
+    currentStep,
+    isTimedWorkout,
+    setActualValue,
+    setCurrentStep,
+    setEditActual,
+    setRestEndsAt,
+    setResting,
+    startTimedStep,
+    workout,
+  ]);
 
   useEffect(() => {
     if (!resting || !restEndsAt) return;
@@ -166,7 +204,7 @@ export default function WorkoutScreen() {
 
     const timer = window.setInterval(updateRestState, 250);
     return () => clearInterval(timer);
-  }, [restEndsAt, resting]);
+  }, [completeRest, restEndsAt, resting]);
 
   useEffect(() => {
     if (!showAchievementToast) return;
@@ -189,6 +227,13 @@ export default function WorkoutScreen() {
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [started, finished]);
+
+  useEffect(() => {
+    const syncViewport = () => setIsDesktopWide(window.innerWidth >= 768);
+    syncViewport();
+    window.addEventListener("resize", syncViewport);
+    return () => window.removeEventListener("resize", syncViewport);
+  }, []);
 
   useEffect(() => {
     if (!workout || !sessionForProgram) return;
@@ -233,38 +278,11 @@ export default function WorkoutScreen() {
     workout,
   ]);
 
-  if (!program) {
-    return <div style={cardStyle}>Программа не найдена</div>;
-  }
+  const currentTarget = workout?.steps[currentStep]?.target ?? 0;
 
-  if (!progress || !id) {
-    return <div style={cardStyle}>Сначала начни программу</div>;
-  }
+  const finishOrContinue = useCallback((nextActuals: number[]) => {
+    if (!id || !workout) return;
 
-  if (progress.finished && !isRepeatMode && !sessionForProgram) {
-    return (
-      <div style={cardStyle}>
-        <h2 style={pageTitleStyle}>Программа завершена</h2>
-        <p style={mutedTextStyle}>
-          Эта программа уже полностью пройдена. Можно посмотреть прогресс или выбрать новую.
-        </p>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <button style={buttonStyle} onClick={() => navigate("/progress")}>Прогресс</button>
-          <button style={secondaryButtonStyle} onClick={() => navigate("/programs")}>Все программы</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!workout) {
-    return <div style={cardStyle}>Тренировка не найдена</div>;
-  }
-
-  const currentTarget = workout.steps[currentStep].target;
-  const unitLabel = program.unit === "seconds" ? "секунд" : getRepetitionWord(currentTarget);
-  const shortUnitLabel = program.unit === "seconds" ? "сек" : "повт";
-
-  const finishOrContinue = (nextActuals: number[]) => {
     const isLast = currentStep >= workout.steps.length - 1;
 
     if (isLast) {
@@ -304,6 +322,8 @@ export default function WorkoutScreen() {
         week: workout.week,
         day: workout.day,
         title: workout.title,
+        planned: [...plannedValues],
+        actual: [...nextActuals],
         plannedTotal: finalPlannedTotal,
         actualTotal: finalActualTotal,
         gainedXp: (passed ? 10 : 5) + newUnlockedIds.length * ACHIEVEMENT_XP_REWARD,
@@ -322,7 +342,26 @@ export default function WorkoutScreen() {
     setRestEndsAt(nextRestEndsAt);
     setResting(true);
     resetStepTimer();
-  };
+  }, [
+    clearActiveWorkoutSession,
+    completeWorkout,
+    currentStep,
+    failWorkout,
+    id,
+    isRepeatMode,
+    plannedValues,
+    resetStepTimer,
+    settings.restSeconds,
+    setCompletedWorkoutInfo,
+    setFinished,
+    setRestEndsAt,
+    setResting,
+    setShowAchievementToast,
+    setSuccess,
+    setToastAchievementIds,
+    syncAchievementRewards,
+    workout,
+  ]);
 
   useEffect(() => {
     if (!stepTimerRunning || !stepTimerEndsAt) return;
@@ -348,13 +387,42 @@ export default function WorkoutScreen() {
 
     const timer = window.setInterval(updateStepTimerState, 250);
     return () => clearInterval(timer);
-  }, [actuals, currentTarget, finishOrContinue, stepTimerEndsAt, stepTimerRunning]);
+  }, [actuals, currentTarget, finishOrContinue, resetStepTimer, stepTimerEndsAt, stepTimerRunning]);
+
+  if (!program) {
+    return <div style={cardStyle}>Программа не найдена</div>;
+  }
+
+  if (!progress || !id) {
+    return <div style={cardStyle}>Сначала начни программу</div>;
+  }
+
+  if (progress.finished && !isRepeatMode && !sessionForProgram) {
+    return (
+      <div style={cardStyle}>
+        <h2 style={pageTitleStyle}>Программа завершена</h2>
+        <p style={mutedTextStyle}>
+          Эта программа уже полностью пройдена. Можно посмотреть прогресс или выбрать новую.
+        </p>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <button style={buttonStyle} onClick={() => navigate("/progress")}>Прогресс</button>
+          <button style={secondaryButtonStyle} onClick={() => navigate("/programs")}>Все программы</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!workout) {
+    return <div style={cardStyle}>Тренировка не найдена</div>;
+  }
+
+  const programGlyph = getProgramGlyph(program.id, program.unit);
+  const shortUnitLabel = program.unit === "seconds" ? "сек" : "повт";
 
   const onStart = () => {
     setStarted(true);
     setCurrentStep(0);
     setFinished(false);
-    resetStepTimer();
     setResting(false);
     setActuals([]);
     setRestEndsAt(null);
@@ -363,16 +431,17 @@ export default function WorkoutScreen() {
     setSuccess(null);
     setShowAchievementToast(false);
     setToastAchievementIds([]);
+
+    if (isTimedWorkout) {
+      startTimedStep(currentTarget);
+    } else {
+      resetStepTimer();
+    }
   };
 
   const onDoneDefault = () => {
     if (isTimedWorkout) {
-      const nextStepTimerEndsAt = new Date(Date.now() + currentTarget * 1000).toISOString();
-      setStepTimerRunning(true);
-      setStepTimeLeft(currentTarget);
-      setStepTimerEndsAt(nextStepTimerEndsAt);
-      setEditActual(false);
-      setActualValue("");
+      startTimedStep(currentTarget);
       return;
     }
 
@@ -391,6 +460,8 @@ export default function WorkoutScreen() {
     if (!hasValidActualValue) return;
 
     const nextActuals = [...actuals, parsedActualValue];
+    setEditActual(false);
+    setActualValue("");
     setActuals(nextActuals);
     resetStepTimer();
     finishOrContinue(nextActuals);
@@ -402,6 +473,17 @@ export default function WorkoutScreen() {
     resetStepTimer();
     setEditActual(true);
     setActualValue(String(elapsed));
+  };
+
+  const stopTimedAttemptAndContinue = () => {
+    const elapsed = Math.max(0, currentTarget - stepTimeLeft);
+    const nextActuals = [...actuals, elapsed];
+
+    resetStepTimer();
+    setEditActual(false);
+    setActualValue("");
+    setActuals(nextActuals);
+    finishOrContinue(nextActuals);
   };
 
   const skipRest = () => {
@@ -444,117 +526,250 @@ export default function WorkoutScreen() {
     setShowAchievementToast(false);
     setToastAchievementIds([]);
     navigate("/result", {
-      state: {
-        title: completedWorkoutInfo?.title ?? workout.title,
-        week: completedWorkoutInfo?.week ?? workout.week,
-        day: completedWorkoutInfo?.day ?? workout.day,
-        plannedTotal: completedWorkoutInfo?.plannedTotal ?? plannedTotal,
-        actualTotal: completedWorkoutInfo?.actualTotal ?? actualTotalSoFar,
-        gainedXp: completedWorkoutInfo?.gainedXp ?? 0,
-        achievementTitle: firstAchievementTitle,
-      },
+        state: {
+          title: completedWorkoutInfo?.title ?? workout.title,
+          week: completedWorkoutInfo?.week ?? workout.week,
+          day: completedWorkoutInfo?.day ?? workout.day,
+          plannedTotal: completedWorkoutInfo?.plannedTotal ?? plannedTotal,
+          actualTotal: completedWorkoutInfo?.actualTotal ?? actualTotalSoFar,
+          gainedXp: completedWorkoutInfo?.gainedXp ?? 0,
+          achievementTitle: firstAchievementTitle,
+        },
     });
   };
 
-  const workoutStructure = (
-    <div
-      style={{
-        ...cardStyle,
-        padding: 16,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          marginBottom: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ fontWeight: 800 }}>Структура тренировки</div>
-        <div style={{ ...mutedTextStyle, fontSize: 13 }}>
-          {completedSets}/{workout.steps.length} готово
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(64px, 1fr))",
-          gap: 8,
-        }}
-      >
-        {workout.steps.map((step, index) => {
-          const isDone = index < completedSets;
-          const isCurrent = index === currentStep && started && !resting && !finished;
-          const actualDone = actuals[index] ?? null;
-          const isUnderTarget = actualDone !== null && actualDone < step.target;
-
-          return (
-            <div
-              key={step.index}
-              style={{
-                padding: "10px 8px",
-                borderRadius: 16,
-                textAlign: "center",
-                background: isUnderTarget
-                  ? "rgba(239, 68, 68, 0.10)"
-                  : isDone
-                  ? "var(--success-bg-soft)"
-                  : isCurrent
-                  ? "var(--primary-soft-2)"
-                  : "var(--soft-bg)",
-                border: `1px solid ${
-                  isUnderTarget
-                    ? "rgba(239, 68, 68, 0.35)"
-                    : isDone
-                    ? "var(--success-border)"
-                    : isCurrent
-                    ? "color-mix(in srgb, var(--primary-color) 48%, white 10%)"
-                    : "var(--border-color)"
-                }`,
-              }}
-            >
-              <div style={{ fontSize: 12, color: "var(--muted-text-color)", marginBottom: 4 }}>
-                {step.index}
-              </div>
-              <div style={{ fontWeight: 900, fontSize: 18 }}>{step.target}</div>
-              <div
-                style={{
-                  fontSize: 12,
-                  marginTop: 4,
-                  color: isUnderTarget ? "#dc2626" : "var(--muted-text-color)",
-                  fontWeight: isCurrent ? 800 : 600,
-                }}
-              >
-                {isDone ? `Факт ${actuals[index] ?? step.target}` : isCurrent ? "Сейчас" : "Дальше"}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-
   const scheduleLabel = `Неделя ${workout.week} · День ${workout.day}`;
-  const normalizedWorkoutTitle = workout.title.trim().toLowerCase();
-  const showWorkoutTitle =
-    normalizedWorkoutTitle !== scheduleLabel.toLowerCase() &&
-    normalizedWorkoutTitle !== scheduleLabel.replace(" · ", ", ").toLowerCase();
-
   const heroPanelStyle: React.CSSProperties = {
     ...cardStyle,
-    padding: 22,
-    height: 372,
+    padding: isDesktopWide ? "24px 24px 26px" : 22,
+    width: "100%",
+    maxWidth: isDesktopWide ? 780 : "100%",
+    margin: isDesktopWide ? "0 auto" : undefined,
+    height: isDesktopWide ? "auto" : "calc(100svh - 164px)",
+    minHeight: isDesktopWide ? 0 : 372,
+    maxHeight: isDesktopWide ? "none" : "calc(100svh - 164px)",
     boxSizing: "border-box",
     display: "flex",
     flexDirection: "column",
-    justifyContent: "space-between",
-    gap: 18,
-    overflow: "hidden",
+    justifyContent: "flex-start",
+    gap: isDesktopWide ? 18 : 18,
+    overflow: isDesktopWide ? "visible" : "hidden",
   };
+
+  const heroWorkoutBackground = "var(--card-bg)";
+
+  const heroRestBackground = "var(--card-bg)";
+
+  const topMetaColor = settings.theme === "dark" ? "rgba(255,255,255,0.78)" : "rgba(15,23,42,0.62)";
+  const topChipBackground = settings.theme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.58)";
+  const topChipBorder = settings.theme === "dark"
+    ? "1px solid rgba(255,255,255,0.1)"
+    : "1px solid rgba(148,163,184,0.18)";
+  const headerTopRowStyle: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: isDesktopWide ? "40px minmax(0, 1fr) 56px" : "42px minmax(0, 1fr) 56px",
+    alignItems: "center",
+    gap: isDesktopWide ? 10 : 12,
+  };
+  const headerMetaStyle: React.CSSProperties = {
+    margin: 0,
+    fontSize: isDesktopWide ? 12 : 12,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: topMetaColor,
+    textAlign: "center",
+    whiteSpace: "nowrap",
+  };
+  const headerStepChipStyle: React.CSSProperties = {
+    width: isDesktopWide ? 54 : 56,
+    height: isDesktopWide ? 36 : 38,
+    padding: 0,
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: topChipBackground,
+    border: topChipBorder,
+    color: "var(--text-color)",
+    fontSize: isDesktopWide ? 13 : 13,
+    fontWeight: 800,
+    flexShrink: 0,
+  };
+  const headerPanelStyle: React.CSSProperties = {
+    padding: isDesktopWide ? "18px 20px 18px" : "18px 18px 16px",
+    minHeight: isDesktopWide ? 0 : undefined,
+    height: isDesktopWide ? "auto" : undefined,
+    borderRadius: 24,
+    background:
+      settings.theme === "dark"
+        ? "linear-gradient(135deg, rgba(79,70,229,0.18) 0%, rgba(59,130,246,0.12) 100%)"
+        : "linear-gradient(135deg, rgba(224,231,255,0.86) 0%, rgba(237,233,254,0.82) 100%)",
+    border: settings.theme === "dark"
+      ? "1px solid rgba(255,255,255,0.06)"
+      : "1px solid rgba(148,163,184,0.12)",
+    boxShadow: settings.theme === "dark"
+      ? "inset 0 1px 0 rgba(255,255,255,0.04)"
+      : "inset 0 1px 0 rgba(255,255,255,0.55)",
+    display: "grid",
+    gridTemplateRows: isDesktopWide ? "42px auto auto" : undefined,
+    alignContent: "stretch",
+    gap: isDesktopWide ? 8 : 14,
+  };
+  const startHeaderPanelStyle: React.CSSProperties = isDesktopWide
+    ? {
+        ...headerPanelStyle,
+        gridTemplateRows: "42px auto auto auto",
+      }
+    : headerPanelStyle;
+  const headerTitleStyle: React.CSSProperties = {
+    fontSize: isDesktopWide ? 20 : 22,
+    fontWeight: 800,
+    lineHeight: 1.05,
+    color: "var(--text-color)",
+    textAlign: "center",
+    letterSpacing: "0.01em",
+    textTransform: "uppercase",
+    textShadow: settings.theme === "dark" ? "0 1px 0 rgba(0,0,0,0.2)" : "none",
+    minHeight: isDesktopWide ? 28 : 24,
+    display: "grid",
+    alignItems: "center",
+  };
+
+  const desktopScreenStyle: React.CSSProperties = isDesktopWide
+    ? {
+        maxWidth: 820,
+        margin: "0 auto",
+        justifyItems: "center",
+      }
+    : {};
+  const heroGlyphSize = isDesktopWide ? 34 : 44;
+  const heroMetricSize = isDesktopWide ? 78 : 88;
+  const heroSectionGap = isDesktopWide ? 12 : 10;
+  const heroLabelSize = isDesktopWide ? 16 : 16;
+  const heroInfoSize = isDesktopWide ? 13 : 14;
+  const heroStateTitleSize = isDesktopWide ? 20 : 22;
+  const heroBodyStyle: React.CSSProperties = {
+    display: "grid",
+    justifyItems: "center",
+    alignContent: "center",
+    alignItems: "center",
+    minHeight: 0,
+    flex: isDesktopWide ? undefined : 1,
+    paddingTop: isDesktopWide ? 8 : 8,
+    paddingBottom: isDesktopWide ? 4 : 8,
+    gap: heroSectionGap,
+    gridTemplateRows: isDesktopWide ? "auto auto auto auto" : undefined,
+  };
+  const desktopCtaRailStyle: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "56px minmax(0, 1fr)",
+    gap: 12,
+    width: "100%",
+    minHeight: 56,
+    alignItems: "stretch",
+  };
+  const activeHeroActionRowStyle: React.CSSProperties = isDesktopWide
+    ? desktopCtaRailStyle
+    : {
+        display: "grid",
+        gridTemplateColumns: "64px minmax(0, 1fr)",
+        gap: 12,
+        width: "100%",
+        alignItems: "stretch",
+      };
+  const restHeroActionRowStyle: React.CSSProperties = isDesktopWide
+    ? {
+        width: "100%",
+        minHeight: 56,
+        display: "flex",
+        alignItems: "stretch",
+        marginTop: 4,
+      }
+    : {
+        width: "100%",
+        minHeight: 56,
+      };
+
+  const renderPlanStrip = (activeStepIndex?: number) => (
+      <div
+      style={{
+        width: "100%",
+        minHeight: isDesktopWide ? 0 : undefined,
+        display: "grid",
+        alignItems: "stretch",
+      }}
+      >
+      <div
+        className="workout-plan-strip"
+        style={{
+          display: "grid",
+          gap: 8,
+          gridTemplateColumns: `repeat(${workout.steps.length}, minmax(0, 1fr))`,
+          width: "100%",
+          alignSelf: "stretch",
+        }}
+      >
+      {workout.steps.map((step, index) => {
+        const isActive = activeStepIndex === index;
+        const hasActualValue = typeof actuals[index] === "number";
+        const displayValue =
+          editActual && index === currentStep
+            ? currentStepPreviewValue
+            : hasActualValue
+              ? actuals[index]
+              : step.target;
+
+        return (
+          <div
+            key={`plan-${index}-${step.target}`}
+            style={{
+              minWidth: 0,
+              padding: isDesktopWide ? "10px 8px" : "10px 8px",
+              borderRadius: isDesktopWide ? 16 : 18,
+              background: isActive
+                ? "linear-gradient(135deg, var(--primary-color) 0%, var(--primary-strong) 100%)"
+                : settings.theme === "dark"
+                  ? "rgba(255,255,255,0.06)"
+                  : "rgba(255,255,255,0.42)",
+              color: isActive ? "#fff" : "var(--text-color)",
+              display: "grid",
+              gap: isDesktopWide ? 6 : 4,
+              justifyItems: "center",
+              alignContent: "center",
+              textAlign: "center",
+              minHeight: isDesktopWide ? 80 : undefined,
+                border: isActive
+                  ? "none"
+                  : settings.theme === "dark"
+                    ? "1px solid rgba(255,255,255,0.08)"
+                    : "1px solid rgba(148,163,184,0.18)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: isDesktopWide ? 12 : 11,
+                fontWeight: 700,
+                opacity: isActive ? 0.9 : 0.7,
+                letterSpacing: "0.02em",
+              }}
+            >
+              {index + 1}
+            </div>
+            <div
+              style={{
+                fontSize: isDesktopWide ? 24 : 22,
+                fontWeight: 900,
+                lineHeight: 1,
+                wordBreak: "break-word",
+              }}
+            >
+              {displayValue}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+    </div>
+  );
 
   const handleExitAttempt = () => {
     if (started && !finished) {
@@ -719,16 +934,17 @@ export default function WorkoutScreen() {
           </div>
         </div>
 
-        <div style={cardStyle}>
-          <h3 style={{ marginTop: 0 }}>Результат по подходам</h3>
-          <div style={{ display: "grid", gap: 10 }}>
-            {workout.steps.map((step, idx) => {
-              const actual = actuals[idx] ?? 0;
-              const done = actual >= step.target;
+          <div style={cardStyle}>
+            <h3 style={{ marginTop: 0 }}>Результат по подходам</h3>
+            <div style={{ display: "grid", gap: 10 }}>
+            {completedWorkoutInfo.planned.map((target, idx) => {
+              const actual = completedWorkoutInfo.actual[idx] ?? 0;
+              const done = actual >= target;
+              const stepNumber = idx + 1;
 
               return (
                 <div
-                  key={step.index}
+                  key={`completed-step-${stepNumber}`}
                   style={{
                     padding: 12,
                     borderRadius: 14,
@@ -736,7 +952,7 @@ export default function WorkoutScreen() {
                     border: `1px solid ${done ? "var(--success-border)" : "var(--border-color)"}`,
                   }}
                 >
-                  Подход {step.index}: цель {step.target} {shortUnitLabel}, выполнено {actual} {shortUnitLabel}
+                  Подход {stepNumber}: цель {target} {shortUnitLabel}, выполнено {actual} {shortUnitLabel}
                 </div>
               );
             })}
@@ -747,7 +963,7 @@ export default function WorkoutScreen() {
   }
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
+    <div className="workout-screen" style={{ display: "grid", gap: 16, ...desktopScreenStyle }}>
       {showExitDialog && (
         <ConfirmDialog
           title="Тренировка ещё не завершена"
@@ -769,236 +985,252 @@ export default function WorkoutScreen() {
         />
       )}
 
-      <div style={cardStyle}>
-        <div
-          style={{
-            display: "grid",
-            gap: 14,
-            marginBottom: 14,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              gap: 12,
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <h2 style={{ ...pageTitleStyle, marginBottom: 10 }}>{program.title}</h2>
-              <p style={{ ...mutedTextStyle, margin: 0 }}>
-                {showWorkoutTitle ? `${scheduleLabel} · ${workout.title}` : scheduleLabel}
-              </p>
-              <div style={{ ...mutedTextStyle, marginTop: 6, fontSize: 13 }}>
-                Нагрузка: {progress.loadAdjustment === 0.9 ? "мягче" : progress.loadAdjustment === 1.1 ? "интенсивнее" : "стандарт"}
-              </div>
-            </div>
-
-            {(started || finished) && (
-              <button
-                style={{
-                  ...secondaryButtonStyle,
-                  padding: "10px 14px",
-                  minWidth: 84,
-                  flexShrink: 0,
-                }}
-                onClick={handleExitAttempt}
-              >
-                Выйти
-              </button>
-            )}
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: 10,
-              fontSize: 14,
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div style={{ ...mutedTextStyle, fontSize: 12, marginBottom: 4 }}>Прогресс тренировки</div>
-              <div style={{ fontWeight: 800 }}>{currentWorkoutProgressPercent}%</div>
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ ...mutedTextStyle, fontSize: 12, marginBottom: 4 }}>Подходов готово</div>
-              <div style={{ fontWeight: 800 }}>
-                {completedSets}/{workout.steps.length}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div
-          style={{
-            height: 12,
-            borderRadius: 999,
-            background: "var(--soft-bg)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              width: `${currentWorkoutProgressPercent}%`,
-              height: "100%",
-              borderRadius: 999,
-              background: "linear-gradient(90deg, var(--primary-color) 0%, var(--primary-strong) 100%)",
-            }}
-          />
-        </div>
-      </div>
-
       {!started && (
         <div
-          style={{
-            display: "grid",
-            gap: 12,
-            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          }}
-        >
-          <MiniWorkoutStat label="Сделано подходов" value={String(completedSets)} helper={`Осталось ${remainingSets}`} />
-          <MiniWorkoutStat
-            label="План на тренировку"
-            value={`${plannedTotal} ${shortUnitLabel}`}
-            helper={`${workout.steps.length} ${pluralizeSets(workout.steps.length)}`}
-          />
-          <div style={{ gridColumn: "1 / -1" }}>
-            <MiniWorkoutStat label="Факт сейчас" value={`${actualTotalSoFar} ${shortUnitLabel}`} helper="Начни тренировку" />
-          </div>
-        </div>
-      )}
-
-      {!started && (
-        <div
+          className="workout-hero-panel"
           style={{
             ...heroPanelStyle,
             textAlign: "center",
-            alignItems: "center",
+            background: heroWorkoutBackground,
           }}
         >
-          <div style={{ width: "100%", display: "grid", gap: 16, justifyItems: "center" }}>
-            <div style={{ fontSize: 48 }}>
-              {program.unit === "seconds" ? "⏱️" : "💪"}
+          <div
+            style={{
+              width: "100%",
+              height: isDesktopWide ? "auto" : "100%",
+              display: "grid",
+              gridTemplateRows: isDesktopWide ? "auto auto auto" : "auto auto 1fr auto",
+              gap: isDesktopWide ? 14 : 16,
+              flex: isDesktopWide ? undefined : 1,
+            }}
+          >
+            <div className="workout-header-panel" style={startHeaderPanelStyle}>
+              {isDesktopWide ? (
+                <>
+                  <div style={headerTopRowStyle}>
+                    <button
+                      style={{
+                        ...secondaryButtonStyle,
+                        width: 42,
+                        height: 42,
+                        padding: 0,
+                        borderRadius: 999,
+                        display: "grid",
+                        placeItems: "center",
+                        flexShrink: 0,
+                      }}
+                      onClick={handleExitAttempt}
+                      aria-label="Выйти"
+                    >
+                      ×
+                    </button>
+
+                    <div style={headerMetaStyle}>{scheduleLabel}</div>
+
+                    <div style={headerStepChipStyle}>
+                      1/{workout.steps.length}
+                    </div>
+                  </div>
+
+                  <div style={headerTitleStyle}>{program.title}</div>
+
+                  <div
+                    style={{
+                      ...mutedTextStyle,
+                      margin: 0,
+                      fontSize: 13,
+                      textAlign: "center",
+                    }}
+                  >
+                    {progress.loadAdjustmentPreset === 0.9
+                      ? "Мягкая нагрузка"
+                      : progress.loadAdjustmentPreset === 1.1
+                        ? "Интенсивная нагрузка"
+                        : "Стандартная нагрузка"}
+                  </div>
+
+                  {renderPlanStrip()}
+                </>
+              ) : (
+                <>
+                  <div style={{ display: "grid", gap: 8, justifyItems: "center" }}>
+                    <div style={{ ...mutedTextStyle, margin: 0, fontSize: 12 }}>
+                      {progress.loadAdjustmentPreset === 0.9
+                        ? "Мягкая нагрузка"
+                        : progress.loadAdjustmentPreset === 1.1
+                          ? "Интенсивная нагрузка"
+                          : "Стандартная нагрузка"}
+                    </div>
+                    <div style={{ fontSize: 52, lineHeight: 1 }}>{programGlyph}</div>
+                    <div
+                      style={{
+                        margin: 0,
+                        fontSize: 12,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                        color: topMetaColor,
+                      }}
+                    >
+                      {scheduleLabel}
+                    </div>
+                    <h2
+                      style={{
+                        margin: 0,
+                        fontSize: 28,
+                        lineHeight: 1.05,
+                        fontWeight: 800,
+                        letterSpacing: "0.02em",
+                        textTransform: "uppercase",
+                        textAlign: "center",
+                      }}
+                    >
+                      {program.title}
+                    </h2>
+                    <div style={{ ...mutedTextStyle, margin: 0 }}>
+                      {workout.steps.length} {pluralizeSets(workout.steps.length)}
+                    </div>
+                  </div>
+
+                  {renderPlanStrip()}
+                </>
+              )}
             </div>
 
-            <div>
-              <h3 style={{ margin: "0 0 10px" }}>Готов к тренировке?</h3>
-              <p style={{ ...mutedTextStyle, margin: 0 }}>
-                Тебя ждут {workout.steps.length} {pluralizeSets(workout.steps.length)} на {plannedTotal} {shortUnitLabel}
-              </p>
-            </div>
+            {isDesktopWide ? <div style={{ minHeight: 8 }} /> : <div />}
+
+            {isDesktopWide ? (
+              <div style={{ ...restHeroActionRowStyle, minHeight: 56 }}>
+                <button
+                  style={{ ...buttonStyle, width: "100%", height: 56, borderRadius: 999, fontSize: 16 }}
+                  onClick={onStart}
+                >
+                  Начать тренировку
+                </button>
+              </div>
+            ) : (
+              <button
+                style={{ ...buttonStyle, width: "100%", marginTop: "auto", height: isDesktopWide ? 56 : undefined }}
+                onClick={onStart}
+              >
+                Начать тренировку
+              </button>
+            )}
           </div>
-
-          <button style={{ ...buttonStyle, width: "100%" }} onClick={onStart}>
-            Начать тренировку
-          </button>
         </div>
       )}
 
       {started && !resting && !finished && (
         <div
+          className="workout-hero-panel"
           style={{
             ...heroPanelStyle,
             textAlign: "center",
-            background:
-              "radial-gradient(circle at top, rgba(124,92,255,0.18), transparent 38%), linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 96%, #0f172a 4%) 0%, var(--card-bg) 100%)",
+            background: heroWorkoutBackground,
           }}
         >
           <div
             style={{
-              minHeight: 188,
               display: "grid",
-              alignContent: "center",
-              gap: 14,
+              gridTemplateRows: isDesktopWide ? "auto auto auto" : "auto 1fr auto",
+              gap: isDesktopWide ? 22 : 16,
+              height: isDesktopWide ? "auto" : "100%",
+              flex: isDesktopWide ? undefined : 1,
             }}
           >
-            <div style={{ fontSize: 42, lineHeight: 1 }}>🏋️</div>
+            <div className="workout-header-panel" style={headerPanelStyle}>
+              <div style={headerTopRowStyle}>
+                <button
+                  style={{
+                    ...secondaryButtonStyle,
+                    width: 42,
+                    height: 42,
+                    padding: 0,
+                    borderRadius: 999,
+                    display: "grid",
+                    placeItems: "center",
+                    flexShrink: 0,
+                  }}
+                  onClick={handleExitAttempt}
+                  aria-label="Выйти"
+                >
+                  ×
+                </button>
 
-            <div
-              style={{
-                color: "var(--muted-text-color)",
-                fontSize: 14,
-                fontWeight: 700,
-              }}
-            >
-              Подход {getDisplayedStepIndex(workout.steps[currentStep].index, resting, workout.steps.length)} из {workout.steps.length}
+                <div style={headerMetaStyle}>
+                  {scheduleLabel}
+                </div>
+
+                <div style={headerStepChipStyle}>
+                  {currentStep + 1}/{workout.steps.length}
+                </div>
+              </div>
+
+              <div style={headerTitleStyle}>
+                {program.title}
+              </div>
+
+              {renderPlanStrip(currentStep)}
             </div>
 
-            <div
-              style={{
-                fontSize: 84,
-                fontWeight: 900,
-                lineHeight: 0.92,
-                color: "var(--text-color)",
-              }}
-            >
-              {stepTimerRunning
-                ? stepTimeLeft
-                : editActual
-                ? currentStepPreviewValue
-                : currentTarget}
-            </div>
-
-            <div style={{ ...mutedTextStyle, fontSize: 15 }}>
-              {stepTimerRunning ? "секунд осталось" : unitLabel}
-            </div>
-
-            {stepTimerRunning ? (
+            <div style={heroBodyStyle}>
+              <div style={{ fontSize: heroGlyphSize, lineHeight: 1, display: "grid", placeItems: "center" }}>
+                {programGlyph}
+              </div>
               <div
                 style={{
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: "var(--primary-strong)",
-                  minHeight: 21,
+                  fontSize: heroMetricSize,
+                  fontWeight: 900,
+                  lineHeight: 0.9,
+                  color: "var(--text-color)",
                 }}
               >
-                Обратный отсчёт уже идёт
+                {stepTimerRunning
+                  ? stepTimeLeft
+                  : editActual
+                  ? currentStepPreviewValue
+                  : currentTarget}
               </div>
-            ) : editActual ? (
               <div
                 style={{
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: "var(--primary-strong)",
-                  minHeight: 21,
+                  fontSize: heroLabelSize,
+                  display: "grid",
+                  placeItems: "center",
+                  minHeight: 24,
+                  color: settings.theme === "dark" ? "rgba(255,255,255,0.72)" : "rgba(15,23,42,0.56)",
                 }}
               >
-                Предпросмотр факта: {currentStepPreviewValue} {shortUnitLabel}
+                {stepTimerRunning ? "секунд осталось" : `Подход ${currentStep + 1}`}
               </div>
-            ) : (
-              <div style={{ minHeight: 21 }} />
-            )}
+              {stepTimerRunning ? (
+                <div
+                  style={{
+                    fontSize: heroInfoSize,
+                    fontWeight: 700,
+                    color: "var(--primary-strong)",
+                    minHeight: 21,
+                  }}
+                >
+                  Обратный отсчёт уже идёт
+                </div>
+              ) : editActual ? (
+                <div
+                  style={{
+                    fontSize: heroInfoSize,
+                    fontWeight: 700,
+                    color: "var(--primary-strong)",
+                    minHeight: 21,
+                  }}
+                >
+                  Предпросмотр: {currentStepPreviewValue}
+                </div>
+              ) : (
+                <div style={{ minHeight: 21 }} />
+              )}
+            </div>
           </div>
 
           {!editActual && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 1fr) 64px",
-                gap: 12,
-                width: "100%",
-                alignItems: "stretch",
-              }}
-            >
-              <button
-                style={{
-                  ...buttonStyle,
-                  width: "100%",
-                  opacity: stepTimerRunning ? 0.75 : 1,
-                  cursor: stepTimerRunning ? "default" : "pointer",
-                }}
-                onClick={onDoneDefault}
-                disabled={stepTimerRunning}
-              >
-                {isTimedWorkout
-                  ? stepTimerRunning
-                    ? "Таймер запущен"
-                    : "Запустить таймер"
-                  : "Подход выполнен"}
-              </button>
-
+            <div style={activeHeroActionRowStyle}>
               <button
                 onClick={() => {
                   if (isTimedWorkout && stepTimerRunning) {
@@ -1021,8 +1253,8 @@ export default function WorkoutScreen() {
                 }
                 style={{
                   width: "100%",
-                  height: 56,
-                  borderRadius: 18,
+                  height: isDesktopWide ? 48 : 56,
+                  borderRadius: 999,
                   border: "1px solid color-mix(in srgb, var(--primary-color) 28%, transparent)",
                   background: "var(--primary-soft-2)",
                   color: "var(--primary-strong)",
@@ -1032,36 +1264,39 @@ export default function WorkoutScreen() {
                   boxShadow: "0 10px 24px rgba(124, 92, 255, 0.18)",
                 }}
               >
-                {isTimedWorkout && stepTimerRunning ? (
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="24"
-                    height="24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <rect x="6" y="6" width="12" height="12" rx="2" />
-                  </svg>
-                ) : (
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="24"
-                    height="24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
-                  </svg>
-                )}
+                <svg
+                  viewBox="0 0 24 24"
+                  width="24"
+                  height="24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+                </svg>
+              </button>
+
+              <button
+                style={{
+                  ...buttonStyle,
+                  width: "100%",
+                  height: isDesktopWide ? 56 : 56,
+                  opacity: stepTimerRunning ? 0.75 : 1,
+                  cursor: "pointer",
+                  borderRadius: 999,
+                  fontSize: isDesktopWide ? 16 : undefined,
+                }}
+                onClick={isTimedWorkout && stepTimerRunning ? stopTimedAttemptAndContinue : onDoneDefault}
+              >
+                {isTimedWorkout
+                  ? stepTimerRunning
+                    ? "Стоп"
+                    : "Выполнено"
+                  : "Выполнено"}
               </button>
             </div>
           )}
@@ -1134,68 +1369,104 @@ export default function WorkoutScreen() {
 
       {started && resting && (
         <div
+          className="workout-hero-panel"
           style={{
             ...heroPanelStyle,
-            background:
-              settings.theme === "dark"
-                ? "linear-gradient(135deg, color-mix(in srgb, var(--primary-soft-2) 32%, #0f172a 68%) 0%, color-mix(in srgb, var(--primary-soft) 38%, #020617 62%) 100%)"
-                : "radial-gradient(circle at top, color-mix(in srgb, #ffffff 44%, transparent) 0%, transparent 36%), linear-gradient(135deg, color-mix(in srgb, var(--primary-soft-2) 72%, #ffffff 28%) 0%, color-mix(in srgb, var(--primary-soft) 78%, #ffffff 22%) 100%)",
+            background: heroRestBackground,
             textAlign: "center",
           }}
         >
           <div
             style={{
-              minHeight: 188,
+              height: isDesktopWide ? "auto" : "100%",
               display: "grid",
-              alignContent: "center",
-              gap: 14,
+              gridTemplateRows: isDesktopWide ? "auto auto auto" : "auto 1fr auto",
+              gap: isDesktopWide ? 22 : 16,
+              flex: isDesktopWide ? undefined : 1,
             }}
           >
-            <div style={{ fontSize: 42 }}>⏳</div>
-            <h3 style={{ margin: 0, color: "var(--text-color)" }}>Отдых</h3>
-            <div
-              style={{
-                fontSize: 84,
-                fontWeight: 900,
-                lineHeight: 0.92,
-                color: "var(--text-color)",
-              }}
-            >
-              {restLeft}
+            <div className="workout-header-panel" style={headerPanelStyle}>
+              <div style={headerTopRowStyle}>
+                <button
+                  onClick={() => setShowExitDialog(true)}
+                  style={{
+                    ...secondaryButtonStyle,
+                    width: 42,
+                    height: 42,
+                    padding: 0,
+                    borderRadius: 999,
+                    display: "grid",
+                    placeItems: "center",
+                    flexShrink: 0,
+                  }}
+                  aria-label="Выйти из тренировки"
+                >
+                  ×
+                </button>
+
+                <div style={headerMetaStyle}>
+                  {scheduleLabel}
+                </div>
+
+                <div style={headerStepChipStyle}>
+                  {Math.min(currentStep + 1, workout.steps.length - 1) + 1}/{workout.steps.length}
+                </div>
+              </div>
+
+              <div style={headerTitleStyle}>
+                {program.title}
+              </div>
+
+              {renderPlanStrip(Math.min(currentStep + 1, workout.steps.length - 1))}
             </div>
-            <p style={{ margin: 0, color: "var(--text-color)" }}>
-              Восстановись перед следующим подходом.
-            </p>
-            <p style={{ fontSize: 14, margin: 0, color: "var(--muted-text-color)" }}>
-              Следующий подход: {nextStep ? `${nextStep.target} ${shortUnitLabel}` : "финальный"}
-            </p>
+
+            <div style={{ ...heroBodyStyle, gap: 12 }}>
+              <div style={{ fontSize: heroGlyphSize, lineHeight: 1, display: "grid", placeItems: "center" }}>
+                ⏳
+              </div>
+              <h3
+                style={{
+                  margin: 0,
+                  color: "var(--text-color)",
+                  fontSize: heroStateTitleSize,
+                  fontWeight: 800,
+                  letterSpacing: "0.01em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Отдых
+              </h3>
+              <div
+                style={{
+                  fontSize: heroMetricSize,
+                  fontWeight: 900,
+                  lineHeight: 0.92,
+                  color: "var(--text-color)",
+                }}
+              >
+                {restLeft}
+              </div>
+              <div style={{ minHeight: heroLabelSize + heroInfoSize + 12 }} />
+            </div>
           </div>
 
-          <button
-            style={{
-              ...secondaryButtonStyle,
-              width: "100%",
-              background: "var(--card-bg)",
-              color: "var(--text-color)",
-            }}
-            onClick={skipRest}
-          >
-            Пропустить отдых
-          </button>
+          <div style={restHeroActionRowStyle}>
+            <button
+              style={{
+                ...buttonStyle,
+                width: "100%",
+                height: 56,
+                borderRadius: 999,
+                fontSize: isDesktopWide ? 16 : undefined,
+              }}
+              onClick={skipRest}
+            >
+              Пропустить отдых
+            </button>
+          </div>
         </div>
       )}
 
-      {started ? workoutStructure : null}
-    </div>
-  );
-}
-
-function MiniWorkoutStat({ label, value, helper }: { label: string; value: string; helper: string }) {
-  return (
-    <div style={cardStyle}>
-      <div style={{ color: "var(--muted-text-color)", fontSize: 13, marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 800, marginBottom: 6 }}>{value}</div>
-      <div style={{ ...mutedTextStyle, fontSize: 13 }}>{helper}</div>
     </div>
   );
 }
@@ -1295,11 +1566,6 @@ function currentTargetValue(workout: NonNullable<ReturnType<typeof getWorkoutByP
   return workout?.steps[currentStep]?.target ?? 0;
 }
 
-function getDisplayedStepIndex(currentIndex: number, resting: boolean, totalSteps: number) {
-  if (!resting) return currentIndex;
-  return Math.min(currentIndex + 1, totalSteps);
-}
-
 function pluralizeSets(count: number) {
   const lastTwo = count % 100;
   const last = count % 10;
@@ -1310,12 +1576,21 @@ function pluralizeSets(count: number) {
   return "подходов";
 }
 
-function getRepetitionWord(count: number) {
-  const lastTwo = count % 100;
-  const last = count % 10;
+function getProgramGlyph(programId: string, unit: "reps" | "seconds") {
+  if (unit === "seconds") return "⏱️";
 
-  if (lastTwo >= 11 && lastTwo <= 14) return "повторений";
-  if (last === 1) return "повторение";
-  if (last >= 2 && last <= 4) return "повторения";
-  return "повторений";
+  const glyphs: Record<string, string> = {
+    pushups: "💪",
+    abs: "🔥",
+    crunches: "🔥",
+    pullups_classic: "🧗",
+    pullups_reverse: "🧗",
+    pullups_parallel: "🧗",
+    dips: "🏋️",
+    bench_pushups: "💥",
+    squats: "🦵",
+    bulgarian_split_squats: "🦵",
+  };
+
+  return glyphs[programId] ?? "🏋️";
 }

@@ -212,6 +212,7 @@ export default function AchievementsScreen() {
                             background: unlocked ? "var(--success-bg)" : "var(--soft-bg)",
                             color: unlocked ? "var(--success-color)" : "var(--muted-text-color)",
                             whiteSpace: "nowrap",
+                            flexShrink: 0,
                             alignSelf: "start",
                           }}
                         >
@@ -257,6 +258,8 @@ export default function AchievementsScreen() {
                           fontWeight: 800,
                           background: unlocked ? "var(--success-bg)" : "var(--primary-soft-2)",
                           color: unlocked ? "var(--success-color)" : "var(--primary-strong)",
+                          whiteSpace: "nowrap",
+                          flexShrink: 0,
                         }}
                       >
                         {unlocked

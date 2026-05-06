@@ -47,6 +47,8 @@ model ProgramProgress {
   userId             String
   programId          String
   level              Int
+  baseLoadAdjustment   Float    @default(1)
+  loadAdjustmentPreset Float    @default(1)
   loadAdjustment     Float    @default(1)
   startedAt          DateTime
   currentWeek        Int

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { achievements } from "../data/achievements";
 import { programs } from "../data/programs";
@@ -9,9 +9,12 @@ import {
   secondaryButtonStyle,
 } from "../components/ui";
 import { useAppStore } from "../store/appStore";
+import type { UserProgramProgress } from "../types";
 import { calculateAchievementProgress, getAchievementPresentation } from "../utils/achievements";
 import { getLevelFromXp, getXpProgress } from "../utils/level";
 import { getProgramTotalWorkouts } from "../utils/plan";
+
+type AnimationPhase = "idle" | "exit-left" | "exit-right" | "enter-left" | "enter-right";
 
 export default function HomeScreen() {
   const navigate = useNavigate();
@@ -55,14 +58,23 @@ export default function HomeScreen() {
 
   const effectivePrograms = startedPrograms;
 
-  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(
+  const [displayedProgramId, setDisplayedProgramId] = useState<string | null>(
     resolvedActiveProgramId
   );
+  const [incomingProgramId, setIncomingProgramId] = useState<string | null>(null);
+  const [programCardAnimation, setProgramCardAnimation] = useState<AnimationPhase>("idle");
+  const animationTimers = useRef<number[]>([]);
+
+  useEffect(() => {
+    return () => {
+      animationTimers.current.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, []);
 
   const currentIndex = useMemo(() => {
     if (effectivePrograms.length === 0) return 0;
 
-    const preferredIds = [selectedProgramId, resolvedActiveProgramId];
+    const preferredIds = [displayedProgramId, resolvedActiveProgramId];
 
     for (const programId of preferredIds) {
       if (!programId) continue;
@@ -71,10 +83,14 @@ export default function HomeScreen() {
     }
 
     return 0;
-  }, [effectivePrograms, resolvedActiveProgramId, selectedProgramId]);
+  }, [displayedProgramId, effectivePrograms, resolvedActiveProgramId]);
 
   const currentProgram = effectivePrograms[currentIndex] ?? null;
   const currentProgress = currentProgram ? progressMap[currentProgram.id] ?? null : null;
+  const incomingProgram = incomingProgramId
+    ? effectivePrograms.find((program) => program.id === incomingProgramId) ?? null
+    : null;
+  const incomingProgress = incomingProgram ? progressMap[incomingProgram.id] ?? null : null;
 
   const currentProgramPercent =
     currentProgram && currentProgress
@@ -84,6 +100,22 @@ export default function HomeScreen() {
             100
         )
       : 0;
+
+  const incomingProgramPercent =
+    incomingProgram && incomingProgress
+      ? Math.round(
+          (incomingProgress.completedWorkouts.length /
+            Math.max(getProgramTotalWorkouts(incomingProgram), 1)) *
+            100
+        )
+      : 0;
+  const activeIndicatorIndex =
+    incomingProgramId && programCardAnimation !== "idle"
+      ? Math.max(
+          0,
+          effectivePrograms.findIndex((program) => program.id === incomingProgramId)
+        )
+      : currentIndex;
 
   const visibleAchievements = useMemo(() => {
     const sorted = achievements.slice().sort((a, b) => {
@@ -100,28 +132,179 @@ export default function HomeScreen() {
   const canSlidePrev = currentIndex > 0;
   const canSlideNext = currentIndex < effectivePrograms.length - 1;
 
+  const animateToProgram = (nextIndex: number) => {
+    const nextProgram = effectivePrograms[nextIndex] ?? null;
+    const nextProgramId = nextProgram?.id ?? null;
+
+    if (!nextProgramId || nextProgramId === displayedProgramId) return;
+
+    animationTimers.current.forEach((timer) => window.clearTimeout(timer));
+    animationTimers.current = [];
+
+    const direction = nextIndex > currentIndex ? "right" : "left";
+    setIncomingProgramId(nextProgramId);
+    setProgramCardAnimation(direction === "right" ? "exit-left" : "exit-right");
+
+    const enterTimer = window.setTimeout(() => {
+      setProgramCardAnimation(direction === "right" ? "enter-right" : "enter-left");
+    }, 150);
+
+    const finishTimer = window.setTimeout(() => {
+      setDisplayedProgramId(nextProgramId);
+      setIncomingProgramId(null);
+      setProgramCardAnimation("idle");
+      animationTimers.current = [];
+    }, 320);
+
+    animationTimers.current = [enterTimer, finishTimer];
+  };
+
   const goPrev = () => {
-    const nextProgram = effectivePrograms[Math.max(0, currentIndex - 1)] ?? null;
-    setSelectedProgramId(nextProgram?.id ?? null);
+    animateToProgram(Math.max(0, currentIndex - 1));
   };
 
   const goNext = () => {
-    const nextProgram =
-      effectivePrograms[Math.min(effectivePrograms.length - 1, currentIndex + 1)] ?? null;
-    setSelectedProgramId(nextProgram?.id ?? null);
+    animateToProgram(Math.min(effectivePrograms.length - 1, currentIndex + 1));
   };
 
-  const openCurrentProgram = () => {
-    if (!currentProgram || !currentProgress) return;
-    setActiveProgram(currentProgram.id);
+  const renderProgramCard = (
+    program: (typeof programs)[number],
+    progress: UserProgramProgress,
+    percent: number
+  ) => (
+    <div
+      style={{
+        padding: 18,
+        borderRadius: 22,
+        background:
+          "linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 96%, #ffffff 4%) 0%, var(--soft-bg) 100%)",
+        border: "1px solid color-mix(in srgb, var(--border-color) 88%, transparent)",
+        boxShadow: "0 18px 40px color-mix(in srgb, var(--text-color) 10%, transparent)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: 12,
+          marginBottom: 12,
+        }}
+      >
+        <div
+          style={{
+            padding: "7px 10px",
+            borderRadius: 999,
+            background: "color-mix(in srgb, var(--primary-color) 14%, transparent)",
+            color: "var(--primary-strong)",
+            fontSize: 13,
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+          }}
+        >
+          Уровень {progress.level}
+        </div>
+      </div>
 
-    if (currentProgress.finished) {
-      navigate(`/plan/${currentProgram.id}`);
-      return;
-    }
+      <div
+        style={{
+          fontSize: 22,
+          fontWeight: 700,
+          color: "var(--text-color)",
+          lineHeight: 1.15,
+          marginBottom: 8,
+        }}
+      >
+        {program.title}
+      </div>
 
-    navigate(`/workout/${currentProgram.id}`);
-  };
+      <div style={{ ...mutedTextStyle, fontSize: 14, marginBottom: 12 }}>
+        {progress.finished
+          ? "Программа завершена."
+          : `Сейчас открыта неделя ${progress.currentWeek}, день ${progress.currentDay}.`}
+      </div>
+
+      <div
+        style={{
+          fontSize: 15,
+          fontWeight: 500,
+          color: "var(--text-color)",
+          marginBottom: 10,
+        }}
+      >
+        Выполнено {progress.completedWorkouts.length} из {getProgramTotalWorkouts(program)}{" "}
+        тренировок
+      </div>
+
+      <div
+        style={{
+          height: 8,
+          borderRadius: 999,
+          background: "rgba(148, 163, 184, 0.14)",
+          overflow: "hidden",
+          marginBottom: 10,
+        }}
+      >
+        <div
+          style={{
+            width: `${percent}%`,
+            height: "100%",
+            background: "linear-gradient(90deg, var(--primary-color), var(--primary-strong))",
+            borderRadius: 999,
+          }}
+        />
+      </div>
+
+      <div
+        style={{
+          fontSize: 14,
+          color: "var(--muted-text-color)",
+          marginBottom: 16,
+        }}
+      >
+        {percent}% прогресса по программе
+      </div>
+
+      <div style={{ display: "grid", gap: 10, maxWidth: 240 }}>
+        <button
+          style={{
+            ...buttonStyle,
+            width: "100%",
+            fontWeight: 700,
+            borderRadius: 16,
+          }}
+          onClick={() => {
+            setActiveProgram(program.id);
+
+            if (progress.finished) {
+              navigate(`/plan/${program.id}`);
+              return;
+            }
+
+            navigate(`/workout/${program.id}`);
+          }}
+        >
+          {progress.finished ? "Открыть план" : "Продолжить тренировку"}
+        </button>
+
+        {!progress.finished && (
+          <button
+            style={{
+              ...secondaryButtonStyle,
+              width: "fit-content",
+              minWidth: 132,
+              borderRadius: 16,
+              background: "var(--card-bg)",
+              boxShadow: "0 12px 24px color-mix(in srgb, var(--text-color) 10%, transparent)",
+            }}
+            onClick={() => navigate(`/plan/${program.id}`)}
+          >
+            Смотреть план
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
   if (startedPrograms.length === 0) {
     return (
@@ -286,130 +469,28 @@ export default function HomeScreen() {
 
         {currentProgram && currentProgress ? (
           <div style={{ display: "grid", gap: 14 }}>
-            <div
-              style={{
-                padding: 18,
-                borderRadius: 22,
-                background:
-                  "linear-gradient(180deg, color-mix(in srgb, var(--card-bg) 96%, #ffffff 4%) 0%, var(--soft-bg) 100%)",
-                border: "1px solid color-mix(in srgb, var(--border-color) 88%, transparent)",
-                boxShadow: "0 18px 40px color-mix(in srgb, var(--text-color) 10%, transparent)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                  gap: 12,
-                  marginBottom: 12,
-                }}
-              >
+            <div style={{ position: "relative", minHeight: 356 }}>
+              {(!incomingProgram ||
+                programCardAnimation === "idle" ||
+                programCardAnimation.startsWith("exit")) && (
                 <div
-                  style={{
-                    padding: "7px 10px",
-                    borderRadius: 999,
-                    background: "color-mix(in srgb, var(--primary-color) 14%, transparent)",
-                    color: "var(--primary-strong)",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    whiteSpace: "nowrap",
-                  }}
+                  className={
+                    programCardAnimation === "idle"
+                      ? "program-card"
+                      : `program-card ${programCardAnimation}`
+                  }
                 >
-                  Уровень {currentProgress.level}
+                  {renderProgramCard(currentProgram, currentProgress, currentProgramPercent)}
                 </div>
-              </div>
+              )}
 
-              <div
-                style={{
-                  fontSize: 22,
-                  fontWeight: 700,
-                  color: "var(--text-color)",
-                  lineHeight: 1.15,
-                  marginBottom: 8,
-                }}
-              >
-                {currentProgram.title}
-              </div>
-
-              <div style={{ ...mutedTextStyle, fontSize: 14, marginBottom: 12 }}>
-                {currentProgress.finished
-                  ? "Программа завершена."
-                  : `Сейчас открыта неделя ${currentProgress.currentWeek}, день ${currentProgress.currentDay}.`}
-              </div>
-
-              <div
-                style={{
-                  fontSize: 15,
-                  fontWeight: 500,
-                  color: "var(--text-color)",
-                  marginBottom: 10,
-                }}
-              >
-                Выполнено {currentProgress.completedWorkouts.length} из{" "}
-                {getProgramTotalWorkouts(currentProgram)} тренировок
-              </div>
-
-              <div
-                style={{
-                  height: 8,
-                  borderRadius: 999,
-                  background: "rgba(148, 163, 184, 0.14)",
-                  overflow: "hidden",
-                  marginBottom: 10,
-                }}
-              >
-                <div
-                  style={{
-                    width: `${currentProgramPercent}%`,
-                    height: "100%",
-                    background:
-                      "linear-gradient(90deg, var(--primary-color), var(--primary-strong))",
-                    borderRadius: 999,
-                  }}
-                />
-              </div>
-
-              <div
-                style={{
-                  fontSize: 14,
-                  color: "var(--muted-text-color)",
-                  marginBottom: 16,
-                }}
-              >
-                {currentProgramPercent}% прогресса по программе
-              </div>
-
-              <div style={{ display: "grid", gap: 10, maxWidth: 240 }}>
-                <button
-                  style={{
-                    ...buttonStyle,
-                    width: "100%",
-                    fontWeight: 700,
-                    borderRadius: 16,
-                  }}
-                  onClick={openCurrentProgram}
-                >
-                  {currentProgress.finished ? "Открыть план" : "Продолжить тренировку"}
-                </button>
-
-                {!currentProgress.finished && (
-                  <button
-                    style={{
-                      ...secondaryButtonStyle,
-                      width: "fit-content",
-                      minWidth: 132,
-                      borderRadius: 16,
-                      background: "var(--card-bg)",
-                      boxShadow:
-                        "0 12px 24px color-mix(in srgb, var(--text-color) 10%, transparent)",
-                    }}
-                    onClick={() => navigate(`/plan/${currentProgram.id}`)}
-                  >
-                    Смотреть план
-                  </button>
+              {incomingProgram &&
+                incomingProgress &&
+                programCardAnimation.startsWith("enter") && (
+                  <div className={`program-card program-card-overlay ${programCardAnimation}`}>
+                    {renderProgramCard(incomingProgram, incomingProgress, incomingProgramPercent)}
+                  </div>
                 )}
-              </div>
             </div>
 
             {effectivePrograms.length > 1 && (
@@ -423,16 +504,22 @@ export default function HomeScreen() {
                 {effectivePrograms.map((program, index) => (
                   <button
                     key={program.id}
-                    onClick={() => setSelectedProgramId(program.id)}
+                    onClick={() => animateToProgram(index)}
                     aria-label={`Перейти к программе ${program.title}`}
                     style={{
-                      width: 8,
+                      width: index === activeIndicatorIndex ? 18 : 8,
                       height: 8,
                       borderRadius: 999,
                       border: "none",
                       padding: 0,
                       background:
-                        index === currentIndex ? "var(--primary-color)" : "var(--border-color)",
+                        index === activeIndicatorIndex
+                          ? "linear-gradient(90deg, var(--primary-color), var(--primary-strong))"
+                          : "var(--border-color)",
+                      opacity: index === activeIndicatorIndex ? 1 : 0.7,
+                      transform: index === activeIndicatorIndex ? "scale(1)" : "scale(0.96)",
+                      transition:
+                        "width 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, transform 220ms ease, background 220ms ease",
                       cursor: "pointer",
                     }}
                   />

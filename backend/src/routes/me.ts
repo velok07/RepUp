@@ -38,6 +38,8 @@ type IncomingWorkoutLog = {
 type IncomingProgressItem = {
   programId: string;
   level: number;
+  baseLoadAdjustment?: number;
+  loadAdjustmentPreset?: number;
   loadAdjustment?: number;
   startedAt: string;
   currentWeek: number;
@@ -51,6 +53,8 @@ type IncomingProgressItem = {
 type DbProgressItem = {
   programId: string;
   level: number;
+  baseLoadAdjustment: number;
+  loadAdjustmentPreset: number;
   loadAdjustment: number;
   startedAt: Date;
   currentWeek: number;
@@ -123,6 +127,8 @@ router.get("/state", authMiddleware, async (req, res) => {
         {
           programId: item.programId,
           level: item.level,
+          baseLoadAdjustment: item.baseLoadAdjustment ?? item.loadAdjustment ?? 1,
+          loadAdjustmentPreset: item.loadAdjustmentPreset ?? 1,
           loadAdjustment: item.loadAdjustment ?? 1,
           startedAt: item.startedAt.toISOString(),
           currentWeek: item.currentWeek,
@@ -292,6 +298,9 @@ router.put("/state", authMiddleware, async (req, res) => {
           },
           update: {
             level: progressItem.level,
+            baseLoadAdjustment:
+              progressItem.baseLoadAdjustment ?? progressItem.loadAdjustment ?? 1,
+            loadAdjustmentPreset: progressItem.loadAdjustmentPreset ?? 1,
             loadAdjustment: progressItem.loadAdjustment ?? 1,
             startedAt: new Date(progressItem.startedAt),
             currentWeek: progressItem.currentWeek,
@@ -304,6 +313,9 @@ router.put("/state", authMiddleware, async (req, res) => {
             userId,
             programId: progressItem.programId,
             level: progressItem.level,
+            baseLoadAdjustment:
+              progressItem.baseLoadAdjustment ?? progressItem.loadAdjustment ?? 1,
+            loadAdjustmentPreset: progressItem.loadAdjustmentPreset ?? 1,
             loadAdjustment: progressItem.loadAdjustment ?? 1,
             startedAt: new Date(progressItem.startedAt),
             currentWeek: progressItem.currentWeek,

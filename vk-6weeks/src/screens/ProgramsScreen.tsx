@@ -276,6 +276,8 @@ function ProgramCard({
               color: statusColor,
               fontSize: 12,
               fontWeight: 700,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
             }}
           >
             {status}

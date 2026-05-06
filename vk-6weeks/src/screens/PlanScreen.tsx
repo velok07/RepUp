@@ -5,7 +5,7 @@ import { useAppStore } from "../store/appStore";
 import type { ProgramType } from "../types";
 import {
   getAdjustedPlanByLevel,
-  getLoadAdjustmentLabel,
+  getLoadAdjustmentPresetLabel,
   LOAD_ADJUSTMENT_PRESETS,
   makeWorkoutKey,
 } from "../utils/plan";
@@ -56,7 +56,7 @@ export default function PlanScreen() {
 
   const completedSet = new Set(progress.completedWorkouts);
   const currentKey = makeWorkoutKey(progress.currentWeek, progress.currentDay);
-  const currentLoadAdjustment = progress.loadAdjustment ?? 1;
+  const currentLoadAdjustmentPreset = progress.loadAdjustmentPreset ?? 1;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -83,12 +83,12 @@ export default function PlanScreen() {
 
         <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
           <div style={{ fontSize: 13, opacity: 0.9 }}>
-            Корректировка нагрузки: {getLoadAdjustmentLabel(currentLoadAdjustment)}
+            Корректировка нагрузки: {getLoadAdjustmentPresetLabel(currentLoadAdjustmentPreset)}
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {LOAD_ADJUSTMENT_PRESETS.map((preset) => {
-              const isActive = currentLoadAdjustment === preset.value;
+              const isActive = currentLoadAdjustmentPreset === preset.value;
 
               return (
                 <button

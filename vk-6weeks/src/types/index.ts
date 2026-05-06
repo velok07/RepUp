@@ -88,6 +88,8 @@ export interface ActiveWorkoutSession {
 export interface UserProgramProgress {
   programId: ProgramType;
   level: number;
+  baseLoadAdjustment: number;
+  loadAdjustmentPreset: number;
   loadAdjustment: number;
   startedAt: string;
   currentWeek: number;

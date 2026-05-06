@@ -13,12 +13,17 @@ export async function initVkUser() {
   try {
     const user = await vkSend<VkUserInfo>("VKWebAppGetUserInfo");
 
-    useAppStore.getState().setUser({
-      vkId: user.id,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      photoUrl: user.photo_200,
-    });
+    // VK profile hydration should not trigger a remote state save on app open.
+    // We only mirror identity fields into the local store here.
+    useAppStore.setState((state) => ({
+      user: {
+        ...state.user,
+        vkId: user.id,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        photoUrl: user.photo_200,
+      },
+    }));
 
     console.log("[RepUp] VK user loaded", user);
   } catch (error) {

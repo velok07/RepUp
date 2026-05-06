@@ -21,17 +21,19 @@ export default function ProfileScreen() {
   const user = useAppStore((s) => s.user);
 
   const [confirmReset, setConfirmReset] = useState(false);
-  const [restInput, setRestInput] = useState(String(settings.restSeconds));
+  const [restInputState, setRestInputState] = useState(() => ({
+    value: String(settings.restSeconds),
+    dirty: false,
+  }));
   const [saveMessage, setSaveMessage] = useState("");
 
   const restSaveTimeoutRef = useRef<number | null>(null);
   const saveMessageTimeoutRef = useRef<number | null>(null);
 
   const hasAnyProgress = useMemo(() => Object.values(progress).some(Boolean), [progress]);
-
-  useEffect(() => {
-    setRestInput(String(settings.restSeconds));
-  }, [settings.restSeconds]);
+  const restInput = restInputState.dirty
+    ? restInputState.value
+    : String(settings.restSeconds);
 
   useEffect(() => {
     return () => {
@@ -66,7 +68,10 @@ export default function ProfileScreen() {
     const parsed = parsePositiveInt(nextValue);
     const normalized = clampNumber(parsed ?? 0, 0, 600);
 
-    setRestInput(String(normalized));
+    setRestInputState({
+      value: String(normalized),
+      dirty: false,
+    });
 
     if (normalized === settings.restSeconds) {
       return;
@@ -100,7 +105,10 @@ export default function ProfileScreen() {
     const baseValue = parsedRestInput ?? settings.restSeconds;
     const nextValue = String(clampNumber(baseValue + delta, 0, 600));
 
-    setRestInput(nextValue);
+    setRestInputState({
+      value: nextValue,
+      dirty: true,
+    });
     setSaveMessage("");
     scheduleRestSecondsSave(nextValue);
   };
@@ -281,7 +289,10 @@ export default function ProfileScreen() {
               value={restInput}
               onChange={(e) => {
                 const nextValue = sanitizeDigitsInput(e.target.value, 3);
-                setRestInput(nextValue);
+                setRestInputState({
+                  value: nextValue,
+                  dirty: true,
+                });
                 setSaveMessage("");
 
                 if (nextValue.length > 0 && parsePositiveInt(nextValue) !== null) {
@@ -336,6 +347,11 @@ export default function ProfileScreen() {
             gap: 12,
             cursor: "pointer",
             fontWeight: 600,
+            padding: "12px 14px",
+            borderRadius: 16,
+            background: "var(--soft-bg)",
+            border: "1px solid var(--border-color)",
+            userSelect: "none",
           }}
         >
           <input
@@ -346,6 +362,13 @@ export default function ProfileScreen() {
                 autoFillTargetOnComplete: e.target.checked,
               })
             }
+            style={{
+              width: 20,
+              height: 20,
+              margin: 0,
+              flexShrink: 0,
+              accentColor: "var(--primary-color)",
+            }}
           />
           Включить автозачёт цели
         </label>

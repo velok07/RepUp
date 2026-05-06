@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+﻿import { useEffect, type ReactNode } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Icon28GraphOutline,
@@ -73,6 +73,7 @@ export default function App() {
 
   return (
     <div
+      className="app-shell-root"
       style={{
         minHeight: "100vh",
         background:
@@ -82,15 +83,17 @@ export default function App() {
       }}
     >
       <div
+        className="app-shell"
         style={{
-          maxWidth: 560,
           margin: "0 auto",
+          width: "100%",
           minHeight: "100vh",
           display: "flex",
           flexDirection: "column",
         }}
       >
         <header
+          className="app-shell-header"
           style={{
             padding: isHomeScreen
               ? "calc(env(safe-area-inset-top, 0px) + 44px) 16px 12px"
@@ -124,7 +127,7 @@ export default function App() {
                       letterSpacing: "0.08em",
                       textTransform: "uppercase",
                     }}
-                  >
+                    >
                     Фитнес-прогресс
                   </div>
                   <div
@@ -161,7 +164,7 @@ export default function App() {
                   whiteSpace: "nowrap",
                 }}
               >
-                v1.0 MVP
+                v1.1 build
               </div>
             </div>
           ) : screenTitle ? (
@@ -190,6 +193,7 @@ export default function App() {
         </header>
 
         <main
+          className="app-shell-main"
           style={{
             flex: 1,
             padding: "4px 16px calc(92px + env(safe-area-inset-bottom, 0px))",
@@ -245,7 +249,6 @@ export default function App() {
                 </span>
               </span>
 
-              <span style={{ fontSize: 20, fontWeight: 800, lineHeight: 1 }}>←</span>
             </button>
           )}
 
@@ -253,6 +256,7 @@ export default function App() {
         </main>
 
         <nav
+          className="app-shell-nav"
           aria-label="Основная навигация"
           style={{
             position: "sticky",
@@ -385,10 +389,11 @@ function getScreenTitle(pathname: string) {
   if (pathname.startsWith("/program/")) return "Программа";
   if (pathname.startsWith("/level-test/")) return "Стартовый тест";
   if (pathname.startsWith("/plan/")) return "План тренировки";
-  if (pathname.startsWith("/workout/")) return "Тренировка";
+  if (pathname.startsWith("/workout/")) return null;
   if (pathname.startsWith("/progress")) return null;
   if (pathname.startsWith("/achievements")) return null;
   if (pathname.startsWith("/profile")) return null;
   if (pathname.startsWith("/result")) return "Результат";
   return "RepUp";
 }
+
