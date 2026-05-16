@@ -59,6 +59,10 @@ router.post("/vk", async (req, res) => {
             vkId: normalizedVkId,
             firstName,
             lastName,
+            challengeState: {
+              acceptedIds: [],
+              completedIds: [],
+            },
             settings: {
               create: {
                 restSeconds: 60,
@@ -96,7 +100,11 @@ router.post("/vk", async (req, res) => {
       }
     }
 
-    user = await prisma.user.update({
+    if (!user) {
+      return res.status(500).json({ message: "Failed to load user" });
+    }
+
+    const updatedUser = await prisma.user.update({
       where: { id: user.id },
       data: {
         firstName,
@@ -109,17 +117,17 @@ router.post("/vk", async (req, res) => {
     });
 
     const token = signToken({
-      userId: user.id,
-      vkId: user.vkId.toString(),
+      userId: updatedUser.id,
+      vkId: updatedUser.vkId.toString(),
     });
 
     return res.json({
       token,
       user: {
-        id: user.id,
-        vkId: Number(user.vkId),
-        firstName: user.firstName,
-        lastName: user.lastName,
+        id: updatedUser.id,
+        vkId: Number(updatedUser.vkId),
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
       },
     });
   } catch (error) {

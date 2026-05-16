@@ -11,6 +11,10 @@ type SaveStateBody = {
   activeProgramId: string | null;
   activeWorkoutSessions?: Record<string, unknown>;
   progress: Record<string, unknown>;
+  challengeState?: {
+    acceptedIds?: string[];
+    completedIds?: string[];
+  };
   settings: {
     restSeconds: number;
     autoFillTargetOnComplete: boolean;
@@ -74,6 +78,29 @@ type DbWorkoutLog = {
 };
 
 const router = Router();
+
+function normalizeChallengeState(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      acceptedIds: [],
+      completedIds: [],
+    };
+  }
+
+  const candidate = value as {
+    acceptedIds?: unknown;
+    completedIds?: unknown;
+  };
+
+  return {
+    acceptedIds: Array.isArray(candidate.acceptedIds)
+      ? candidate.acceptedIds.filter((item): item is string => typeof item === "string")
+      : [],
+    completedIds: Array.isArray(candidate.completedIds)
+      ? candidate.completedIds.filter((item): item is string => typeof item === "string")
+      : [],
+  };
+}
 
 async function userExists(userId: string) {
   const user = await prisma.user.findUnique({
@@ -165,6 +192,7 @@ router.get("/state", authMiddleware, async (req, res) => {
         !Array.isArray(user.activeWorkoutSessions)
           ? user.activeWorkoutSessions
           : {},
+      challengeState: normalizeChallengeState(user.challengeState),
       progress,
       settings: {
         restSeconds: user.settings.restSeconds,
@@ -203,10 +231,13 @@ router.put("/state", authMiddleware, async (req, res) => {
       activeProgramId,
       activeWorkoutSessions,
       progress,
+      challengeState,
       settings,
       userStats,
     } =
       req.body as SaveStateBody;
+
+    const normalizedChallengeState = normalizeChallengeState(challengeState);
 
     const progressItems = Object.values(progress ?? {}) as IncomingProgressItem[];
     const incomingProgramIds = progressItems.map(
@@ -219,6 +250,7 @@ router.put("/state", authMiddleware, async (req, res) => {
         data: {
           activeProgramId,
           activeWorkoutSessions: (activeWorkoutSessions ?? {}) as Prisma.InputJsonValue,
+          challengeState: normalizedChallengeState as Prisma.InputJsonValue,
           firstName: user?.firstName,
           lastName: user?.lastName,
         },
@@ -384,6 +416,10 @@ router.post("/reset", authMiddleware, async (req, res) => {
         data: {
           activeProgramId: null,
           activeWorkoutSessions: {},
+          challengeState: {
+            acceptedIds: [],
+            completedIds: [],
+          } as Prisma.InputJsonValue,
         },
       });
 
